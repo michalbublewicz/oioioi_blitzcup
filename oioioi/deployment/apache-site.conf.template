@@ -1,0 +1,19 @@
+<VirtualHost *:80>
+    ServerName oioioi.example.com
+    ServerAdmin youremail@example.com
+
+    <Location />
+        SetHandler uwsgi-handler
+        uWSGISocket __DIR__/uwsgi.sock
+    </Location>
+
+    <Location __STATIC_URL__>
+        SetHandler none
+    </Location>
+
+    Alias __STATIC_URL__ __STATIC_ROOT__/
+
+    ErrorLog __DIR__/logs/apache-error.log
+    LogLevel warn
+    CustomLog __DIR__/logs/apache-access.log combined
+</VirtualHost>

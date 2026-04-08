@@ -1,0 +1,80 @@
+{% if blitz_status_endpoint and blitz_initial_payload %}
+{% load i18n %}
+<style>
+.blitz-live-popup {
+    position: fixed;
+    top: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
+    min-width: 340px;
+    max-width: min(90vw, 720px);
+    background: #fff7d6;
+    border: 3px solid #dc3545;
+    border-radius: 16px;
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.25);
+    padding: 1rem 1.25rem;
+    display: none;
+}
+.blitz-live-popup.is-visible {
+    display: block;
+    animation: blitz-pop-in 0.25s ease-out;
+}
+.blitz-live-popup__title {
+    font-size: 1.3rem;
+    font-weight: 700;
+    margin-bottom: 0.35rem;
+}
+.blitz-live-popup__body {
+    font-size: 1.05rem;
+    margin-bottom: 0.35rem;
+}
+.blitz-live-popup__details {
+    color: #6c757d;
+}
+@keyframes blitz-pop-in {
+    from { opacity: 0; transform: translate(-50%, -16px); }
+    to { opacity: 1; transform: translate(-50%, 0); }
+}
+</style>
+<div id="blitz-live-popup" class="blitz-live-popup" aria-live="assertive" aria-atomic="true">
+    <div class="blitz-live-popup__title">{% trans "Problem solved!" %}</div>
+    <div class="blitz-live-popup__body"></div>
+    <div class="blitz-live-popup__details"></div>
+</div>
+{{ blitz_status_endpoint|json_script:'blitz-status-endpoint' }}
+{{ blitz_initial_payload|json_script:'blitz-initial-payload' }}
+<script>
+(function() {
+    const endpoint = JSON.parse(document.getElementById('blitz-status-endpoint').textContent);
+    const initialPayload = JSON.parse(document.getElementById('blitz-initial-payload').textContent);
+    const popup = document.getElementById('blitz-live-popup');
+    const popupBody = popup.querySelector('.blitz-live-popup__body');
+    const popupDetails = popup.querySelector('.blitz-live-popup__details');
+    let latestEventId = initialPayload.latest_event ? initialPayload.latest_event.event_id : null;
+    let popupTimer = null;
+
+    function showPopup(eventData) {
+        popupBody.textContent = `${eventData.solver} rozwiązał ${eventData.short_name} za ${eventData.points} punktów.`;
+        popupDetails.textContent = eventData.details || '';
+        popup.classList.add('is-visible');
+        window.clearTimeout(popupTimer);
+        popupTimer = window.setTimeout(() => popup.classList.remove('is-visible'), 7000);
+    }
+
+    function poll() {
+        $.getJSON(endpoint, function(data) {
+            if (data.latest_event && data.latest_event.event_id !== latestEventId) {
+                latestEventId = data.latest_event.event_id;
+                showPopup(data.latest_event);
+            }
+        }).always(function() {
+            window.setTimeout(poll, 5000);
+        });
+    }
+
+    window.setTimeout(poll, 5000);
+})();
+</script>
+
+{% endif %}

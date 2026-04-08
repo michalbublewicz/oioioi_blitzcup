@@ -1,0 +1,9 @@
+{
+    "ignore":[
+        "adjoining-classes",
+        "box-model",
+        "ids",
+        "order-alphabetical",
+        "overqualified-elements"
+    ]
+}

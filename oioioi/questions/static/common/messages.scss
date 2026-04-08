@@ -1,0 +1,41 @@
+@import "scss/utility";
+
+.oioioi-message {
+  &--has-replies &__body {
+    color: $gray-400;
+  }
+
+  &__actions {
+    padding-top: $padding-base-vertical;
+  }
+
+  &__info {
+    border-bottom: 1px solid theme-color("info");
+    padding: 0 $padding-large-vertical $padding-base-vertical;
+  }
+
+  &__timestamp {
+    font-style: italic;
+  }
+
+  &__badge {
+    margin-right: $padding-large-vertical;
+  }
+
+  &__body {
+    font-family: $font-family-monospace;
+    white-space: pre-wrap;
+  }
+
+  &__action {
+    color: $body-color;
+  }
+
+  &--reply {
+    padding-left: $padding-large-horizontal;
+  }
+
+  &--reply &__info {
+    border-color: theme-color("warning");
+  }
+}

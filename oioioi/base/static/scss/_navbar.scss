@@ -1,0 +1,279 @@
+@import "utility";
+
+$oioioi-navbar-background: #222 !default;
+$oioioi-navbar-color: #cfcfcf !default;
+$oioioi-navbar-height: 50px !default;
+$oioioi-navbar-padding-base-horizontal: $padding-base-horizontal !default;
+$oioioi-navbar-padding-base-vertical: $padding-base-vertical !default;
+
+$oioioi-navbar-default-brand-color: #cfcfcf !default;
+$oioioi-navbar-default-brand-hover-color: $navbar-dark-brand-hover-color !default;
+
+$oioioi-navbar-link-color: #cfcfcf !default;
+
+$oioioi-navbar-link-hover-color: #fff !default;
+$oioioi-navbar-link-active-color: $oioioi-navbar-link-hover-color !default;
+
+$oioioi-navbar-highlighted-color: #fff !default;
+$oioioi-navbar-avatar-size: 25px !default;
+
+// Special case navbar colors
+$oioioi-navbar-time-changed-background: darken(theme-color("primary"), 20) !default;
+$oioioi-navbar-user-changed-background: darken(theme-color("danger"), 20) !default;
+
+// Breakpoint at which admin badges get shrunk to save some space
+$oioioi-navbar-badge-lg-width: 80px !default;
+$oioioi-navbar-contest-max-width: 220px !default;
+$oioioi-navbar-contest-md-max-width: 160px !default;
+$oioioi-navbar-contest-sm-max-width: 120px !default;
+
+// Breakpoint at which countdown text gets hidden
+$oioioi-navbar-countdown-breakpoint: 640px !default;
+
+// For styling headers on small screen-sm-max
+$oioioi-navbar-dropdown-header-bgcolor: #e8e8e8 !default;
+$oioioi-navbar-dropdown-header-border: 2px solid #999999 !default;
+$oioioi-navbar-dropdown-header-margin-top: 12px !default;
+
+$oioioi-navbar-dropdown-input-min-width: 230px !default;
+
+// Required for navbar-fixed-top
+body {
+  padding-top: $oioioi-navbar-height + $countdown-height + $padding-base-vertical * 2;
+}
+
+// Redefine navbar styles to make use of flexbox
+.oioioi-navbar {
+  @include centered-flex();
+  @include fixed(0, 0, auto, 0);
+  background: $oioioi-navbar-background;
+  color: $oioioi-navbar-color;
+  height: $oioioi-navbar-height;
+  padding: 0 $padding-base-horizontal;
+  z-index: 1000;
+
+  // When admin time is set
+  &--admin-time {
+    background: $oioioi-navbar-time-changed-background;
+  }
+  // When logged onto another user using `su`
+  &--admin-su {
+    background: $oioioi-navbar-user-changed-background;
+  }
+
+  .badge {
+    vertical-align: middle;
+  }
+
+  // General menu items styles
+  > a,
+  .dropdown > a,
+  .oioioi-navbar__extra > a,
+  .oioioi-navbar__extra > .dropdown > a,
+  .oioioi-navbar__menu-uncollapsed > a {
+    @include centered-block($oioioi-navbar-height);
+    color: $oioioi-navbar-link-color;
+    padding: 0 $oioioi-navbar-padding-base-horizontal;
+    text-decoration: none;
+    white-space: nowrap;
+
+    > .badge {
+      @include text-overflow();
+      display: inline-block;
+      margin-right: 1em;
+    }
+
+    &:hover {
+      color: $oioioi-navbar-link-hover-color;
+    }
+
+    &:active {
+      color: $oioioi-navbar-link-active-color;
+    }
+  }
+
+  .navbar-clock {
+    @include centered-block($oioioi-navbar-height);
+  }
+
+  .dropdown-menu {
+    max-height: calc(100vh - #{$oioioi-navbar-height});
+    overflow-y: auto;
+    padding-top: 0; // we don't want empty space before first header
+
+    input {
+      min-width: $oioioi-navbar-dropdown-input-min-width;
+    }
+  }
+
+  .dropdown.open > a {
+    color: $oioioi-navbar-link-active-color;
+  }
+
+  // Navbar sections special styles
+  > .oioioi-navbar__brand {
+    color: $oioioi-navbar-default-brand-color;
+
+    &:hover {
+      color: $oioioi-navbar-default-brand-hover-color;
+    }
+  }
+
+  // Hide menu by default (only displayed on small screens)
+  > .oioioi-navbar__menu {
+    display: none;
+  }
+
+  > .oioioi-navbar__countdown {
+    color: $oioioi-navbar-highlighted-color;
+    flex-shrink: 1;
+    overflow: hidden;
+    padding: 0 60px;
+  }
+
+  > .oioioi-navbar__extra,
+  > .oioioi-navbar__menu-uncollapsed {
+    display: flex;
+  }
+
+  // Fills empty space and pushes content to the right
+  > .oioioi-navbar__flex {
+    flex-grow: 100;
+    flex-shrink: 100;
+  }
+
+  // Custom styles for certain elements
+  .dropdown > .contest-picker {
+    align-items: center;
+    display: flex;
+
+    > .contest-name {
+      @include text-overflow();
+      margin-right: .5em;
+      max-width: $oioioi-navbar-contest-max-width;
+    }
+  }
+
+  .navbar-clock {
+    padding: 0 $oioioi-navbar-padding-base-horizontal;
+  }
+
+  .navbar-avatar {
+    @include square($oioioi-navbar-avatar-size);
+  }
+}
+
+
+// Large screens
+// * Badges get shrunk
+@include media-breakpoint-down(lg) {
+  .oioioi-navbar,
+  .oioioi-navbar > .oioioi-navbar__extra,
+  .oioioi-navbar__menu-uncollapsed {
+    > a > .badge,
+    .dropdown > a > .badge {
+      max-width: $oioioi-navbar-badge-lg-width;
+    }
+  }
+}
+
+// Medium screens
+// * Menu replaces brand
+// * Navbar links collapse to a dropdown menu
+// * Contest picker max width decreases
+// * Username and badges gets hidden (only icons)
+// * Countdown text padding gets reduced to 0
+@include media-breakpoint-down(md) {
+  .oioioi-navbar {
+    > .oioioi-navbar__menu {
+      display: block;
+    }
+
+    > .oioioi-navbar__menu-uncollapsed {
+      display: none;
+    }
+
+    > .oioioi-navbar__brand:not(.oioioi-navbar__brand--always) {
+      display: none;
+    }
+
+
+    .dropdown > .contest-picker > .contest-name {
+      max-width: $oioioi-navbar-contest-md-max-width;
+    }
+
+    .dropdown-header {
+      background-color: $oioioi-navbar-dropdown-header-bgcolor;
+      border-top: $oioioi-navbar-dropdown-header-border;
+      margin-top: $oioioi-navbar-dropdown-header-margin-top;
+      &:first-child {
+        margin-top: 0;
+      }
+    }
+
+
+    .badge-full {
+      display: none;
+    }
+
+    .badge-short {
+      display: inline;
+    }
+
+    > .oioioi-navbar__countdown {
+      padding: 0;
+    }
+  }
+}
+
+// Small screens
+// * Navbar extras gets hidden
+// * Dropdown menus gets 100% width
+@include media-breakpoint-down(sm) {
+  .oioioi-navbar {
+     > .oioioi-navbar__extra {
+      display: none;
+    }
+
+    .dropdown {
+      position: static;
+
+      > .dropdown-menu {
+        left: 0;
+        right: 0;
+      }
+
+      > .dropdown-menu > li > a {
+        padding: $oioioi-navbar-padding-base-vertical $oioioi-navbar-padding-base-horizontal;
+      }
+    }
+
+    .dropdown > .contest-picker > .contest-name {
+      max-width: $oioioi-navbar-contest-sm-max-width;
+    }
+  }
+}
+
+// Even smaller screens
+// * Countdown text gets hidden
+@media (max-width: $oioioi-navbar-countdown-breakpoint) {
+  .oioioi-navbar > .oioioi-navbar__countdown {
+    padding: 0;
+
+    > .countdown-time {
+      display: none;
+    }
+  }
+}
+
+// Extra-small screens
+// * Username/login text gets hidden (only icon)
+// * Navbar padding gets removed
+@include media-breakpoint-down(xs) {
+  .oioioi-navbar {
+    padding: 0;
+    > .oioioi-navbar__user .username {
+      display: none;
+    }
+  }
+}

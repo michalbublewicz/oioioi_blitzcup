@@ -1,0 +1,15 @@
+{% extends "simpleui/main_dashboard/dashboard.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Teacher dashboard" %}{% endblock %}
+
+{% block dashboard-name %}{% trans "Teacher dashboard" %}{% endblock %}
+
+{% block dashboard-top-menu %}
+    {{ block.super }}
+    {% if usergroups_active %}
+        <a class="nav-link" href="{% url 'teacher_usergroups_list' %}">
+            {% trans "Your user groups" %}
+        </a>
+    {% endif %}
+{% endblock %}

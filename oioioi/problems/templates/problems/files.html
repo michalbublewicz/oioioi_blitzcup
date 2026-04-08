@@ -1,0 +1,43 @@
+{% load i18n pagination_tags %}
+
+{% if files %}
+    <div class="container">
+        {% autopaginate files files_on_page %}
+        {% paginate %}
+        <div class="table-responsive-md">
+            <table class="table">
+                <thead>
+                    <tr>
+                        {% if add_category_field %}
+                        <th>{% trans "Category" %}</th>
+                        {% endif %}
+                        <th>{% trans "File" %}</th>
+                        <th>{% trans "Description" %}</th>
+                        {% if is_admin and show_pub_dates %}
+                            <th>{% trans "Publication date" %}</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for file in files %}
+                        <tr {% if file.admin_only %} class="text-muted" {% endif %}>
+                            {% if add_category_field %}
+                                <td>{{ file.category }}</td>
+                            {% endif %}
+                            <td><a href="{{ file.link }}">{{ file.name }}</a></td>
+                            <td>{{ file.description }}</td>
+                            {% if is_admin and show_pub_dates %}
+                                <td>{% if file.pub_date %}{{ file.pub_date }}{% endif %}</td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% paginate %}
+    </div>
+{% else %}
+<div class="alert alert-info">
+    {% blocktrans %}No files are available.{% endblocktrans %}
+</div>
+{% endif %}

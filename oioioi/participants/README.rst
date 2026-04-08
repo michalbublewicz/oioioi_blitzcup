@@ -1,0 +1,1 @@
+Contest's participants registration.

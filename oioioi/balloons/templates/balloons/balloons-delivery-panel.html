@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% load i18n %}
+
+{% block scripts %}
+    {{ block.super }}
+    <script type="text/javascript" src="{{ STATIC_URL }}balloons/delivery-panel.js"></script>
+{% endblock %}
+{% block container-class %}container-fluid{% endblock %}
+
+{% block body %}
+    <div class="row">
+        <div class="alert alert-danger d-none">
+            {% trans "AJAX Request failed" %}
+            <span></span>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col-md-6">
+            <h4>{% trans "Delivery requests" %}</h4>
+            <table class="table" id="not-delivered">
+                <thead>
+                    <tr>
+                        <th>{% trans "Color" %}</th>
+                        <th>{% trans "Team" %}</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+        <div class="col-md-6">
+            <h4>{% trans "Recently delivered" %}</h4>
+            <table class="table" id="delivered">
+                <thead>
+                    <tr>
+                        <th>{% trans "Color" %}</th>
+                        <th>{% trans "Team" %}</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <input type="hidden" id="set-delivered-url" value="{% url 'balloons_set_delivered' contest_id=request.contest.id %}">
+    <input type="hidden" id="fetch-url" value="{% url 'balloons_delivery_new' contest_id=request.contest.id %}">
+{% endblock %}

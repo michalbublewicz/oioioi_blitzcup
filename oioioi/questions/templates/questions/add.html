@@ -1,0 +1,25 @@
+{% extends "base-with-menu.html" %}
+
+{% load i18n %}
+{% load static %}
+
+{% block scripts %}
+{{ block.super }}
+{{ form.media }}
+{% endblock %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block main-content %}
+
+<h2>{{ title }}</h2>
+<form enctype="multipart/form-data" method="post">
+    {% include "public_message/show.html" %}
+    {% csrf_token %}
+    <div id="alerts"></div>
+    {% include "ingredients/form.html" with inline=True %}
+    <button type="submit" class="btn btn-primary">
+        {% trans "Submit" %}
+    </button>
+</form>
+{% endblock %}

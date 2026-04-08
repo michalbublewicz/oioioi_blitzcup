@@ -1,0 +1,154 @@
+{% extends "base-with-menu.html" %}
+{% load i18n check_perm pagination_tags %}
+
+{% block title %}{% trans "Questions and news" %}{% endblock %}
+
+{% block main-content %}
+    <script>
+    $(function() {
+        // Warning: If moving this code to a separate .js file,
+        // ABSOLUTELY MAKE SURE to change all occurences of
+        // the trans template tag in js code to gettext("text to translate")
+        // also make sure to run django-admin makemessages
+        // before submitting your changes to github
+        // and translate strings in oioioi-js in Transifex
+        // before deploying
+        const sub_text = '{% trans "Subscribe" %}';
+        const unsub_text = '{% trans "Unsubscribe" %}';
+        const sub_url = 'subscription/';
+        const token = Cookies.get('csrftoken');
+
+        let subscribed;
+
+        function set_sub_btn(subscribed) {
+            $('#sub-btn').attr('disabled', false)
+            $('#sub-text').text(subscribed ? unsub_text : sub_text);
+            $('#busy-indicator').addClass('d-none');
+            $('#envelope-icon').removeClass('d-none');
+        }
+
+        function sub_btn_busy() {
+            $('#sub-btn').attr('disabled', true)
+            $('#busy-indicator').removeClass('d-none');
+            $('#envelope-icon').addClass('d-none');
+        }
+
+        function show_banner(success, caption, text) {
+            const banner_showtime = 3000; // ms
+            var banner = success ? $('#sub-alert-success') : $('#sub-alert-warning')
+            banner.find('strong').text(caption)
+            banner.find('span').text(text)
+            banner.fadeIn();
+            window.setTimeout(function(){
+                banner.fadeOut();
+            }, banner_showtime);
+        }
+
+        function show_fail_banner() {
+            // this is translated inside show_banner
+            const caption = '{% trans "Inconsistent request!" %}';
+            const text = '{% trans "There was an error processing your request. Please reload the page and try again." %}';
+            show_banner(false, caption, text);
+        }
+        function show_success_banner() {
+            // this is translated inside show_banner
+            const sub_text = '{% trans "You successfully subscribed" %}';
+            const unsub_text = '{% trans "You successfully unsubscribed" %}';
+            const caption = '{% trans "Success!" %}';
+            show_banner(true, caption, subscribed ? sub_text : unsub_text);
+        }
+
+        function add_subscription() {
+            sub_btn_busy();
+            $.post(
+                sub_url,
+                {
+                    csrfmiddlewaretoken: token,
+                    add_subscription: !subscribed
+                }
+            ).done(function() {
+                subscribed = !subscribed;
+                set_sub_btn(subscribed);
+                show_success_banner();
+            }).fail(function() {
+                set_sub_btn(subscribed); // resets the button
+                show_fail_banner();
+            });
+        }
+
+        subscribed = '{{ already_subscribed }}' === 'True';
+        set_sub_btn(subscribed);
+        $('#sub-btn').click(add_subscription);
+    });
+    </script>
+    <div class="clearfix">
+        <div class="float-right">
+            {% if user.is_authenticated %}
+                {% if not onsite %}
+                    <button class="btn btn-sm btn-outline-secondary" id="sub-btn"
+                            {% if no_email %} title="You need to add an e-mail address to your account" disabled {% endif %}
+                    >
+                        <i class="fa-solid fa-envelope"></i>
+                        <i class="fa-solid fa-rotate-right spinner d-none"></i>
+                        <span id="sub-text"></span>
+                    </button>
+                {% endif %}
+                {% check_perm 'contests.contest_basicadmin' for contest as is_admin %}
+                {% if not is_contest_archived %}
+                    {% if is_admin %}
+                        <a role="button" class="btn btn-sm btn-outline-secondary"
+                            href="{% url 'add_contest_message' contest_id=contest.id %}">
+                            <i class="fa-solid fa-message"></i>
+                            {% trans "Add news" %}
+                        </a>
+                        <a role="button" class="btn btn-sm btn-outline-secondary"
+                            href="{% url 'oioioiadmin:questions_replytemplate_changelist' %}">
+                            <i class="fa-solid fa-pencil"></i>
+                            {% trans "Edit reply templates" %}
+                        </a>
+                        <a role="button" class="btn btn-sm btn-outline-secondary"
+                        href="{% url 'edit_question_news_message' %}">
+                        <i class="fa-solid fa-pencil"></i>
+                        {% trans "Edit news message" %}
+                    </a>
+                    <a role="button" class="btn btn-sm btn-outline-secondary"
+                        href="{% url 'edit_add_question_message' %}">
+                        <i class="fa-solid fa-pencil"></i>
+                        {% trans "Edit new question message" %}
+                    </a>
+                {% elif categories %}
+                        <a role="button" class="btn btn-sm btn-outline-secondary"
+                            href="{% url 'add_contest_message' contest_id=contest.id %}">
+                            <i class="fa-solid fa-circle-question"></i>
+                            {% trans "Ask a question" %}
+                        </a>
+                    {% endif %}
+                {% endif %}
+            {% endif %}
+            <a role="button" class="btn btn-sm btn-outline-secondary"
+               href="{% url 'contest_all_messages' contest_id=contest.id %}">
+                <i class="fa-solid fa-list"></i>
+                {% trans "Show all messages" %}
+            </a>
+        </div>
+        <h1 class="float-left">{% trans "Questions and news" %}</h1>
+    </div>
+    {% include "public_message/show.html" %}
+    <div id="sub-alert-success" class="alert alert-success collapse">
+        <strong></strong> <span></span>
+    </div>
+    <div id="sub-alert-warning" class="alert alert-warning collapse">
+        <strong></strong> <span></span>
+    </div>
+    {% include "questions/filter_form.html" %}
+    {% if records %}
+        {% autopaginate records questions_on_page %}
+        {% paginate %}
+        {% include "questions/list_table.html" %}
+        {% paginate %}
+    {% else %}
+        <p class="text-center empty-space-filler">
+            {% blocktrans %}No questions or news yet.{% endblocktrans %}
+        </p>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,37 @@
+{% load i18n %}
+{% load check_perm %}
+
+{% if submissions %}
+    <div class="alert alert-danger">
+        {% blocktrans %}
+            <p>We have found that at least one of your submission is not being compliant with terms of the contest:</p>
+        {% endblocktrans %}
+
+        {% for offending in submissions %}
+            {% url 'submission' contest_id=contest.id submission_id=offending.submission.id as link %}
+            <p>
+                <b>{% trans "Offending submission:" %}</b>
+                <a class="alert-link" href="{{ link }}">{{ offending.submission.get_date_display }}</a>
+            </p>
+            <p>{{ offending.reason }}</p>
+        {% endfor %}
+
+        {% if contest_disq_info %}
+            <p>{{ contest_disq_info }}</p>
+        {% endif %}
+    </div>
+{% endif %}
+
+{% if contestwide %}
+    <div class="alert alert-danger">
+        {% blocktrans %}
+            <p>We are going to disqualify you for the following reason:</p>
+        {% endblocktrans %}
+
+        <p>{{ contestwide }}</p>
+
+        {% if contest_disq_info %}
+            <p>{{ contest_disq_info }}</p>
+        {% endif %}
+    </div>
+{% endif %}

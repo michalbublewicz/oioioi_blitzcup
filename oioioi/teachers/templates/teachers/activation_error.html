@@ -1,0 +1,14 @@
+{% extends "simple-centered.html" %}
+{% load i18n %}
+
+{% block content %}
+<div class="text-center">
+    {% if teacher_key_ok and not teacher_registration_active %}
+        <p>{% trans "Registration for teachers has been disabled." %}</p>
+    {% elif pupil_key_ok and not pupil_regitration_active %}
+        <p>{% trans "Registration for pupils has been disabled." %}</p>
+    {% elif not teacher_key_ok and not pupil_key_ok %}
+        <p>{% trans "Invalid activation link." %}</p>
+    {% endif %}
+</div>
+{% endblock %}

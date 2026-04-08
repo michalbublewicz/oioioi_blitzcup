@@ -1,0 +1,59 @@
+@import "problem";
+@import "round";
+@import "scss/utility";
+
+.contest__section {
+  margin-bottom: 5px;
+}
+
+.contest {
+  @include make-row;
+
+  &__header {
+    @include make-col-ready;
+
+    @include media-breakpoint-up(lg) {
+      @include make-col(12);
+    }
+  }
+
+  &__name {
+    margin-bottom: 20px;
+  }
+
+  &__submissions {
+    @extend .contest__section;
+
+    @include make-col-ready;
+
+    @include media-breakpoint-up(lg) {
+      @include make-col(12);
+    }
+    @include media-breakpoint-up(xl) {
+      @include make-col(6);
+    }
+  }
+
+  &__questions {
+    @extend .contest__section;
+
+    @include make-col-ready;
+
+    @include media-breakpoint-up(lg) {
+      @include make-col(12);
+    }
+    @include media-breakpoint-up(xl) {
+      @include make-col(6);
+    }
+  }
+
+  &__rounds {
+    @extend .contest__section;
+
+    @include make-col-ready;
+
+    @include media-breakpoint-up(lg) {
+      @include make-col(12);
+    }
+  }
+}

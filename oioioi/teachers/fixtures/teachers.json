@@ -1,0 +1,22 @@
+[
+    {
+        "pk": 1001,
+        "model": "teachers.teacher",
+        "fields": {
+            "user": 1001,
+            "is_active": true,
+            "school": "School",
+            "join_date": "1983-01-01"
+        }
+    },
+    {
+        "pk": 1002,
+        "model": "teachers.teacher",
+        "fields": {
+            "user": 1002,
+            "is_active": false,
+            "school": "School",
+            "join_date": "1983-01-01"
+        }
+    }
+]

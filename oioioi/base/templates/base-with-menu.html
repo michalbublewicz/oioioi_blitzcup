@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% load blitz_tags %}
+
+{% block body-class %}body-with-menu{% endblock %}
+{% block container-class %}container-fluid{% endblock %}
+
+{% block navbar-logo %}
+    {% include "ingredients/navbar-logo-with-menu.html" %}
+{% endblock %}
+
+{% block body %}
+    <div class="{% block row-class %}row{% endblock %}">
+        <nav id="menu" class="col-lg-3 col-xl-2 d-none d-lg-block">
+            {% block menu %}
+                {% include "ingredients/menu.html" %}
+            {% endblock %}
+        </nav>
+
+        <section class="{% block main-content-style %}col-lg-9 col-xl-10{% endblock %} main-content">
+            {% block flash %}
+                {% include "ingredients/flash.html" %}
+            {% endblock %}
+            {% block main-content %}{% endblock %}
+            {% render_blitz_live_updates %}
+        </section>
+    </div>
+{% endblock %}

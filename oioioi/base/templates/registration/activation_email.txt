@@ -1,0 +1,7 @@
+{% load i18n %}{% blocktrans %}Welcome to OIOIOI,
+
+to finish the sign-up process, please click on the link below:{% endblocktrans %}
+http://{{site}}{% url 'registration_activate' activation_key %}
+
+{% blocktrans %}Best wishes,
+The SIO2 Team{% endblocktrans %}

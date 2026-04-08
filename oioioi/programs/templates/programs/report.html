@@ -1,0 +1,34 @@
+{% load i18n %}
+{% load runtimeformat %}
+
+<article>
+    {% if report.kind == 'INITIAL' %}
+        <h4>{% trans "Initial testing report" %}</h4>
+    {% elif report.kind == 'NORMAL' %}
+        <h4>{% trans "Final testing report" %}</h4>
+    {% elif report.kind == 'HIDDEN' %}
+        <h4>{% trans "Hidden testing report" %}</h4>
+    {% elif report.kind == 'FULL' %}
+        <h4>{% trans "Full testing report" %}</h4>
+    {% else %}
+        <h4>{% trans "Report:" %} {{ report.kind }}</h4>
+    {% endif %}
+
+    {% if compilation_report.status != 'OK' %}
+        <p>{% trans "Compilation failed." %}</p>
+        <pre>
+            {{ compilation_report.compiler_output }}
+        </pre>
+        {% if 'relocation truncated to fit' in compilation_report.compiler_output %}
+            <div class="alert alert-info">
+                <i class="fa-solid fa-circle-info"></i>
+                {% blocktrans %}
+                    This compilation error most commonly occurs when your global variable(s) are too large.
+                {% endblocktrans %}
+            </div>
+        {% endif %}
+    {% else %}
+        {% include "programs/report-body.html" %}
+        {% include "programs/report-comments.html" with groups=groups %}
+    {% endif %}
+</article>

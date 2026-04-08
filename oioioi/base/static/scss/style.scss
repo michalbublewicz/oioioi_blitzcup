@@ -1,0 +1,43 @@
+@import "utility";
+
+@import "bootstrap/scss/bootstrap";
+@import "highlight.js/scss/vs.scss";
+
+@import "scss/admin";
+@import "scss/footer";
+@import "scss/navbar";
+@import "scss/table";
+@import "scss/layout";
+@import "scss/markdown-editor";
+@import "scss/spinner";
+@import "scss/language-picker";
+@import "scss/translation-formset";
+
+body {
+  min-width: $oioioi-body-min-width;
+}
+
+form:not(.form-wide) {
+  max-width: $oioioi-form-max-width;
+}
+
+textarea.non-resizable {
+  resize: none;
+}
+
+img {
+  max-width: 100%;
+}
+
+.django-http-error-message {
+  font-size: 24px;
+  color: #777777;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.tag-label {
+  line-height: 2.5em;
+}

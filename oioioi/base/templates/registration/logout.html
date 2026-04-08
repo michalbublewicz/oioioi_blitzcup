@@ -1,0 +1,14 @@
+{% extends "simple-centered.html" %}
+
+{% load i18n %}
+
+{% block head %}
+    {{ block.super }}
+    <meta http-equiv="Refresh" content="1;url={% url 'index' %}">
+{% endblock %}
+
+{% block content %}
+    <div class="alert alert-info text-center">
+        <p>{% trans "You have been logged out." %}</p>
+    </div>
+{% endblock %}

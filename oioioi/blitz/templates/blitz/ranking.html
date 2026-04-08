@@ -1,0 +1,48 @@
+{% load i18n %}
+
+{% if rows %}
+    <div class="table-responsive-md">
+        <table class="table table-sm submission">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>{% trans "User" %}</th>
+                    <th class="text-right">{% trans "Points" %}</th>
+                    {% for pi, statement_visible in problem_instances %}
+                        <th class="text-center">
+                            {% if statement_visible %}
+                                {% url 'problem_statement' contest_id=contest.id problem_instance=pi.short_name as link %}
+                                <a href="{{ link }}">{{ pi.get_short_name_display }}</a>
+                            {% else %}
+                                {{ pi.get_short_name_display }}
+                            {% endif %}
+                        </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        <td>{{ row.place }}</td>
+                        <td>{{ row.user.get_full_name|default:row.user.username }}</td>
+                        <td class="text-right"><strong>{{ row.sum }}</strong></td>
+                        {% for result in row.results %}
+                            <td class="text-center">
+                                {% if result and result.score %}
+                                    {% if result.url %}<a href="{{ result.url }}">{% endif %}
+                                    <span class="badge badge-success">{{ result.score }}</span>
+                                    {% if result.url %}</a>{% endif %}
+                                {% else %}
+                                    &ndash;
+                                {% endif %}
+                            </td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="alert alert-info">{% trans "Nobody is visible in this ranking yet." %}</div>
+{% endif %}
+

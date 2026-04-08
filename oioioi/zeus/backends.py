@@ -1,0 +1,190 @@
+import base64
+import http.client
+import json
+import logging
+import pprint
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+from django.conf import settings
+from django.utils.module_loading import import_string
+
+logger = logging.getLogger(__name__)
+
+zeus_language_map = {
+    "c": "C",
+    "cc": "CPP",
+    "cpp": "CPP",
+}
+
+
+class ZeusError(Exception):
+    pass
+
+
+class ZeusKeyError(ZeusError, KeyError):
+    pass
+
+
+def get_zeus_server(zeus_id):
+    """Returns ZeusServer instance for ``zeus_id``."""
+    server = settings.ZEUS_INSTANCES[zeus_id]
+    # Used to inject mock instances/special handlers
+    if server[0] == "__use_object__":
+        return import_string(server[1])(zeus_id, server[2])
+    return ZeusServer(zeus_id, server)
+
+
+class Base64String:
+    """String that needs to be encoded using base64 when serializing to JSON."""
+
+    def __init__(self, string):
+        self.string = string
+
+    def __str__(self):
+        return str(self.string)
+
+    def __unicode__(self):
+        return str(self.string)
+
+    def __repr__(self):
+        return f"Base64String({self.string})"
+
+    def __eq__(self, other):
+        return self.string == other.string
+
+
+def _json_base64_encode(o):
+    def _string_base64(s):
+        if isinstance(s, Base64String):
+            return base64.b64encode(str(s).encode("utf-8")).decode("utf-8")
+        raise TypeError
+
+    return json.dumps(o, default=_string_base64, sort_keys=True)
+
+
+def _json_base64_decode(o, wrap=False):
+    def _dict_b64_decode(d):
+        return {k: (Base64String(base64.b64decode(v).decode("utf-8")) if wrap else base64.b64decode(v)) if isinstance(v, str) else v for (k, v) in d.items()}
+
+    return json.loads(o, object_hook=_dict_b64_decode)
+
+
+def _get_key(dictionary, key):
+    if key not in dictionary:
+        raise ZeusKeyError(f"Key {key} not found in result")
+    return dictionary[key]
+
+
+class EagerHTTPBasicAuthHandler(urllib.request.BaseHandler):
+    def __init__(self, user, passwd):
+        cred = f"{user}:{passwd}"
+        self.auth_string = f"Basic {base64.b64encode(cred)}"
+
+    def http_open(self, req):
+        assert isinstance(req, urllib.request.Request), f"Incorrect request type: {type(req)}"
+        if "Authorization" not in req.headers:
+            req.add_header("Authorization", self.auth_string)
+
+    def https_open(self, req):
+        self.http_open(req)
+
+
+class ZeusServer:
+    def __init__(self, zeus_id, server_info):
+        self.url, user, passwd = server_info
+        auth_handler = EagerHTTPBasicAuthHandler(user, passwd)
+        self.opener = urllib.request.build_opener(auth_handler, urllib.request.HTTPSHandler())
+
+    def _send(self, url, data=None, retries=None, **kwargs):
+        """Send the encoded ``data`` to given URL."""
+        timeout = getattr(settings, "ZEUS_CONNECTION_TIMEOUT", 60)
+        retries = retries or getattr(settings, "ZEUS_SEND_RETRIES", 3)
+        retry_sleep = getattr(settings, "ZEUS_RETRY_SLEEP", 1)
+
+        assert retries > 0
+
+        req = urllib.request.Request(url=url, data=data)  # POST
+
+        for i in range(retries):
+            try:
+                f = self.opener.open(req, timeout=timeout)
+                return f.getcode(), f.read()
+            except urllib.error.HTTPError as e:
+                # Custom format for HTTPError,
+                # as default does not say anything.
+                fmt, args = "HTTPError(%s): %s", (str(e.code), str(e.reason))
+                logger.error(fmt, *args)
+                if i == retries - 1:
+                    raise ZeusError(type(e), fmt % args)
+            except (
+                urllib.error.URLError,
+                http.client.HTTPException,
+            ) as e:
+                logger.error("%s exception while querying %s", url, type(e), exc_info=True)
+                if i == retries - 1:
+                    raise ZeusError(type(e), e)
+            time.sleep(retry_sleep)
+
+    def _encode_and_send(self, url, data=None, **kwargs):
+        """Encodes the ``data`` dictionary and sends it to the given URL."""
+
+        assert data is not None
+        json_data = _json_base64_encode(data)
+        code, res = self._send(url, json_data, **kwargs)
+        decoded_res = _json_base64_decode(res)
+
+        logger.info(
+            "Received response with code=%d: %s",
+            code,
+            pprint.pformat(decoded_res, indent=2),
+        )
+        return code, decoded_res
+
+    def send_regular(self, zeus_problem_id, kind, source_code, language, submission_id, return_url):
+        assert kind in ("INITIAL", "NORMAL"), f"Invalid kind: {kind}"
+        assert language in zeus_language_map, f"Invalid language: {language}"
+        url = urllib.parse.urljoin(self.url, f"dcj_problem/{zeus_problem_id}/submissions")
+        data = {
+            "submission_type": Base64String("SMALL" if kind == "INITIAL" else "LARGE"),
+            "return_url": Base64String(return_url),
+            "username": Base64String(submission_id),  # not used by zeus,
+            # only for debugging
+            "metadata": Base64String("HASTA LA VISTA, BABY"),  # not used
+            # by zeus, but zeus sends back meaningful metadata
+            "source_code": Base64String(source_code),
+            "language": Base64String(zeus_language_map[language]),
+        }
+        code, res = self._encode_and_send(url, data)
+        if code != 200:
+            raise ZeusError(res.get("error", None), code)
+        return _get_key(res, "submission_id")
+
+
+class ZeusTestServer(ZeusServer):
+    """Useful for manual debugging
+    In order to use it, add:
+
+    'mock_server': ('__use_object__',
+                       'oioioi.zeus.backends.ZeusTestServer',
+                       ('', '', '')),
+
+    to your ZEUS_INSTANCES dict in settings.py and make sure
+    that your ZEUS_PUSH_GRADE_CALLBACK_URL is correctly set.
+    """
+
+    def _send(self, url, data=None, retries=None, **kwargs):
+        retries = retries or getattr(settings, "ZEUS_SEND_RETRIES", 3)
+        assert retries > 0
+
+        decoded_data = _json_base64_decode(data)
+
+        command = 'curl -H "Content-Type: application/json" -X ' + 'POST -d \'{{"compilation_output":"Q1BQ"}}\' {}'.format(decoded_data["return_url"])
+
+        print("Encoded data: ", data)
+        print("Decoded data: ", decoded_data)
+        print("In order to push grade (CE) for the submission sent, call: ")
+        print(command)
+        return 200, _json_base64_encode({"submission_id": 19123})

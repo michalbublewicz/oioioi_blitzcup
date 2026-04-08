@@ -1,0 +1,16 @@
+{% extends "simple-centered-form-ready.html" %}
+
+{% load i18n %}
+
+{% block content %}
+    <h1>{{ title }}</h1>
+    <form action="{{ action }}" method="post">
+        {% csrf_token %}
+        {% include "ingredients/form.html" %}
+        <div class="form-group">
+            <button type="submit" class="btn btn-primary">
+                {{ submit_button_value|default:_("Submit") }}
+            </button>
+        </div>
+    </form>
+{% endblock %}

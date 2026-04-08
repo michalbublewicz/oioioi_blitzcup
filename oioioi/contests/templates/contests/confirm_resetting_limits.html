@@ -1,0 +1,21 @@
+{% extends "contests/base_confirmation_screen.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Confirm resetting limits" %}{% endblock %}
+
+{% block confirmation_header %}{% trans "Confirm resetting limits" %}{% endblock %}
+
+{% block confirmation_form_explanation %}
+    <p>
+        {% url 'problem_site' probleminstance.problem.problemsite.url_key as url %}
+        {% blocktrans %}
+            You are going to reset time and memory limits and point
+            scores of all tests for problem {{ probleminstance }}.
+            <br>
+            Limits and scores for this problem will be replaced by limits set on the
+            <a href="{{ url }}">
+                problem site
+            </a>.
+        {% endblocktrans %}
+    </p>
+{% endblock %}

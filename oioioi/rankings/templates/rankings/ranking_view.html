@@ -1,0 +1,85 @@
+{% extends "base-with-menu.html" %}
+{% load i18n check_perm simple_filters %}
+
+{% block title %}{% trans "Ranking" %}{% endblock %}
+
+{% block main-content %}
+{% check_perm 'contests.contest_basicadmin' for contest as is_admin %}
+<div class="clearfix">
+    <div class="float-right">
+        {% if is_admin and key %}
+            <a role="button" class="btn btn-sm btn-outline-secondary"
+                href="{% url 'edit_ranking_message' contest_id=contest.id %}">
+                <i class="fa-solid fa-pencil"></i>
+                {% trans "Edit ranking message" %}
+            </a>
+            <a role="button" class="btn btn-sm btn-outline-secondary"
+                href="{% url 'ranking_csv' contest_id=contest.id key=key %}">
+                <i class="fa-solid fa-download"></i>
+                {% trans "Export to CSV" %}
+            </a>
+            <a role="button" class="btn btn-sm btn-outline-secondary"
+                href="#" data-post-url="{% url 'ranking_invalidate' contest_id=contest.id key=key %}">
+                <i class="fa-solid fa-rotate-right"></i>
+                {% trans "Regenerate ranking" %}
+            </a>
+            <a role="button" class="btn btn-sm btn-outline-secondary"
+                href="#" data-post-url="{% url 'ranking_invalidate_contest' contest_id=contest.id key=key %}">
+                <i class="fa-solid fa-rotate-right"></i>
+                {% trans "Regenerate all rankings" %}
+            </a>
+        {% endif %}
+        {% if form and user.is_authenticated and not is_admin %}
+            <a role="button" class="btn btn-sm btn-outline-secondary"
+                href="{% url 'ranking' contest_id=contest.id key=key %}?user={{ request.user.username }}">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                {% trans "Find my place" %}
+            </a>
+        {% endif %}
+    </div>
+    <h1 class="float-left">{% trans "Ranking" %}</h1>
+</div>
+{% include "public_message/show.html" %}
+
+{% if choices|length > 1 %}
+<div>
+    <ul class="nav nav-pills mb-3">
+        {% for choice in choices %}
+            <li role="presentation" class="nav-item">
+                <a class="nav-link {% if choice.0 == key %}active{% endif %}"href="{% url 'ranking' contest_id=contest.id key=choice.0 %}">{{ choice.1 }}</a>
+            </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endif %}
+
+{% if form %}
+    {% if is_admin %}
+        <form class="form-inline nav-content">
+            {% include "ingredients/form.html" with inline=True %}
+            <button class="btn btn-outline-secondary mb-2" type="submit">
+                {% trans "Find" %}
+            </button>
+        </form>
+    {% endif %}
+    <script>
+    $(document).ready(function() {
+        var row = $('#ranking_row_' + location.hash.substr(1));
+        if(row.length) {
+            $('html, body').animate({
+                scrollTop: row.offset().top - $(window).height() / 2
+            }, 500, function() {
+                row.addClass('highlighted');
+            });
+        } else {
+            {% if user.is_authenticated %}
+                row = $('#ranking_row_' + {{ request.user.id }});
+                row.addClass('highlighted');
+            {% endif %}
+        }
+    });
+    </script>
+{% endif %}
+
+{{ ranking }}
+{% endblock %}

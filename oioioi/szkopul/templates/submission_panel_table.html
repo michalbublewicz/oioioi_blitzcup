@@ -1,0 +1,11 @@
+<div class="table-responsive-md">
+    <table class="{% block table-classes %}table table-sm submission{% endblock %}">
+        <tbody>
+            {% for record in submissions %}
+                {% include 'contests/my_submission_table_base_row_begin.html' with shortened=True %}
+                {% block more-columns-after %}{% endblock %}
+                {% include 'contests/my_submission_table_base_row_end.html' with shortened=True %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

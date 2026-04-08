@@ -1,0 +1,43 @@
+# This is a Transifex translations integration file.
+
+name: Transifex translations upload
+
+env:
+  TX_TOKEN: ${{ secrets.TRANSIFEX_API_TOKEN }}
+
+# This job should be only ran by hand.
+on:
+  workflow_dispatch:
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: ./.github/actions/setup-env
+
+    - name: Install gettext
+      run: |
+        sudo apt-get install -y gettext
+
+    - name: Install TX client
+      run: |
+        cd ..
+        curl -o- https://raw.githubusercontent.com/transifex/cli/master/install.sh | bash
+
+    - name: Update repository
+      run: |
+        ../tx pull -af
+        git diff
+
+    - name: Make messages + push
+      run: |
+        cd oioioi
+        django-admin makemessages --all --no-obsolete --symlinks
+        django-admin makemessages --all --no-obsolete --symlinks -d djangojs
+        git diff
+        cd ..
+        ../tx push --source

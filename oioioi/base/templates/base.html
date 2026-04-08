@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+
+{% load i18n all_with_prefix common_media compress simple_tags get_clocks get_su static %}
+{% site_displayed_tag %}
+<html lang="{{ LANGUAGE_CODE|default:"en" }}" {% if LANGUAGE_BIDI %}dir="rtl"{% endif %}>
+    <head>
+    <script src="{% static 'darkreader.bundle.js' %}"></script>
+    
+    {% block head %}
+        <title>{% block title %}{% trans "Main page" %}{% endblock %} - {{ site_name }}</title>
+        <meta charset="UTF-8">
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        {% include "ingredients/head-favicon.html" %}
+
+        {% comment %}
+        Load jQuery here because inlined scripts in some views depends on it.
+        {% endcomment %}
+        <script src="{% static 'jquery.bundle.js' %}"></script>
+
+        {% compress js %}
+            {% common_scripts %}
+        {% endcompress %}
+
+        {% block styles %}
+            {% compress css %}
+                <link rel="stylesheet" type="text/x-scss" href="{% static 'scss/style.scss' %}">
+                <link rel="stylesheet" type="text/css" href="{% static 'fontawesomefree/css/all.min.css' %}">
+                {% common_styles %}
+            {% endcompress %}
+        {% endblock %}
+        {% block adminhead %}{% endblock %}
+        {% all_with_prefix extra_head_ %}
+
+        {% block extrahead %}{% endblock %}
+    {% endblock %}
+    </head>
+    <body class="{% block body-class %}{% endblock %}">
+        <div class="wrapper">
+            {# We cannot move it into seperate file, because blocks has be overriden by extending this template #}
+            <header id="oioioi-navbar" class="oioioi-navbar d-print-none
+            {% if request.session.admin_time %} oioioi-navbar--admin-time {% endif %}
+            {% if is_under_su %} oioioi-navbar--admin-su {% endif %} {% block navbar-class %}{% endblock %}">
+
+                {% block navbar-logo %}
+                    {% include "ingredients/navbar-logo.html" with always_visible=True %}
+                {% endblock %}
+
+                <div class="oioioi-navbar__contests">
+                    {% include "ingredients/navbar-contests.html" %}
+                </div>
+
+                {% block left-navbar %}
+                    {% include "ingredients/navbar-left.html" %}
+                {% endblock %}
+
+                <div class="oioioi-navbar__extra">
+                    {% all_with_prefix extra_navbar_left_ %}
+                    {% block navbar-left-extras %}{% endblock %}
+                </div>
+
+                <div class="oioioi-navbar__flex"></div>
+
+                <div class="oioioi-navbar__countdown">
+                    {% block countdown-clock %}
+                        {% navbar_countdown %}
+                    {% endblock countdown-clock %}
+                </div>
+
+                <div class="oioioi-navbar__flex"></div>
+
+                <div class="oioioi-navbar__extra">
+                    {% all_with_prefix extra_navbar_right_ %}
+                    {% block navbar-right-extras %}{% endblock %}
+                    {% if real_user.is_superuser %}
+                        {% navbar_admin_clock %}
+                    {% else %}
+                        {% navbar_clock %}
+                    {% endif %}
+                </div>
+
+                <div class="oioioi-navbar__lang">
+                    {% block navbar_language_selector %}
+                        {% include 'ingredients/language-picker.html' %}
+                    {% endblock %}
+                </div>
+
+                <div class="oioioi-navbar__user-su">
+                    {% block navbar_user_su_panel %}
+                        {% include "ingredients/navbar-user-su.html" %}
+                    {% endblock %}
+                </div>
+                <div class="oioioi-navbar__user">
+                    {% block navbar_user_panel %}
+                        {% include "ingredients/navbar-user.html" %}
+                    {% endblock %}
+                </div>
+            </header>
+
+            <div class="{% block container-class %}container-fluid{% endblock %} body">
+                {% all_with_prefix extra_body_ %}
+                {% block body %}
+                {% endblock %}
+            </div>
+
+            {% block footer %}
+                {% comment %}
+                    Please make sure that the footer is visible. We are glad that
+                    you are using SIO2 and we simply want the other people to learn
+                    about this system, too. Thank you.
+                {% endcomment %}
+                {% include "ingredients/footer.html" %}
+            {% endblock %}
+        </div>
+        {% block scripts %}
+            <script>const oioioi_base_url = "{{ base_url | escapejs }}";</script>
+            <script src="{% url 'javascript_catalog' %}"></script>
+            <script src="{% static 'index.bundle.js' %}"></script>
+            <script>
+                window.MathJax = {
+                    tex: {
+                      inlineMath: [ ['$','$'], ['\\(','\\)'] ],
+                      displayMath: [ ['$$','$$'], ['\\[','\\]'] ],
+                      processEscapes: true
+                    },
+                    options: {
+                        ignoreHtmlClass: 'tex2jax_ignore',
+                        processHtmlClass: 'tex2jax_process'
+                    }
+                };
+            </script>
+            <script type="text/javascript" id="MathJax-script" src="{% static 'mathjax/tex-chtml.js' %}"></script>
+        {% endblock %}
+    </body>
+</html>

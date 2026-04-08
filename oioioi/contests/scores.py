@@ -1,0 +1,177 @@
+"""Each score class is represented in database as single string formatted as
+``"class_symbol:score_data"`` where ``class_symbol`` is used for binding
+purposes (see :class:`ScoreValue`) and ``score_data`` is score in
+human readable form.
+
+To create new score class ``MyScore`` you have to choose ``class_symbol``
+and decide how to encode score as ``score_data``.
+MyScore should extend :class:`ScoreValue` and implement its
+unimplemented functions such as :py:func:`__add__`, :py:func:`__lt__` etc.
+
+NOTE: when you create a new type of score, make sure that it gets
+registered (its class gets loaded) before any attempt to deserialize its
+instance.
+If you are not sure if this is the case, adding the line
+``from oioioi.yourapp.score import YourScore`` to ``yourapp.models.py``
+should fix the problem.
+
+For simple example of score class implementation see :class:`IntegerScore`.
+"""
+
+from functools import total_ordering
+
+from django.core.exceptions import ValidationError
+from django.utils.translation import gettext_lazy as _
+
+from oioioi.base.utils import ClassInitBase
+
+
+@total_ordering
+class ScoreValue(ClassInitBase):
+    """Base class of all classes that represent a score. Subclass
+    :class:`ScoreValue` to implement a custom score."""
+
+    #: A unique, short class identifier prepended to the database
+    #: representation of the value. This must be overridden in all subclasses.
+    symbol = "__override_in_subclasses__"
+
+    _subclasses = {}
+
+    @classmethod
+    def __classinit__(cls):
+        """Adds subclasses' bindings."""
+
+        this_class = globals().get("ScoreValue", cls)
+        # pylint: disable=bad-super-call
+        super(this_class, cls).__classinit__()
+
+        if this_class == cls:
+            return
+
+        if cls.symbol == this_class.symbol:
+            raise AssertionError(f"Symbol attribute not defined in {cls!r}")
+        if cls.symbol in this_class._subclasses:
+            raise AssertionError(f"Duplicate symbol '{cls.symbol}' used in both {this_class._subclasses[cls.symbol]!r} and {cls!r}")
+        this_class._subclasses[cls.symbol] = cls
+
+    def serialize(self):
+        """Converts the instance of any subclass to string."""
+        return f"{self.symbol}:{self._to_repr()}"
+
+    def __repr__(self):
+        return self.serialize()
+
+    @staticmethod
+    def deserialize(serialized):
+        """Invert the operation of :meth:`serialize`."""
+        if not serialized:
+            return None
+        parts = serialized.split(":", 1)
+        if len(parts) < 2:
+            raise ValidationError(_("Score must look like this: '<type>:<value>', for example 'int:100', not '{}'.".format(serialized)))
+        symbol, value = parts
+        if symbol in ScoreValue._subclasses:
+            return ScoreValue._subclasses[symbol]._from_repr(value)
+        else:
+            raise ValidationError(_("Unrecognized score type '%s'") % (symbol,))
+
+    def __add__(self, other):
+        """Implementation of operator ``+``.
+
+        Used for example when creating user result for round based on scores
+        from all problems of the round.
+
+        Must be overridden in all subclasses.
+        """
+        raise NotImplementedError
+
+    def __eq__(self, other):
+        """Implementation of operator ``==``. Used to produce ranking,
+        being greater means better result.
+
+        Must be overridden in all subclasses.
+        """
+        raise NotImplementedError
+
+    def __lt__(self, other):
+        """Implementation of operator ``<``. Used to produce ranking,
+        being greater means better result.
+
+        Must be overridden in all subclasses.
+        """
+        raise NotImplementedError
+
+    def __unicode__(self):
+        """Returns string representing score, suitable to display to the user.
+
+        Must be overridden in all subclasses.
+        """
+        raise NotImplementedError
+
+    def _to_repr(self):
+        """Returns score data serialized to string, without the class's
+        symbol.
+
+        Must be overridden in all subclasses.
+
+        Lexicographical order of serialized data has to correspond to
+        the given by :meth:`__eq__` and :meth:`__lt__`, it will be used for
+        sorting at db level.
+        """
+        raise NotImplementedError
+
+    @classmethod
+    def _from_repr(cls, encoded_value):
+        """Creates an instance based on data from :meth:`_to_repr`.
+
+        Must be overridden in all subclasses.
+        """
+        raise NotImplementedError
+
+
+@total_ordering
+class IntegerScore(ScoreValue):
+    """Score consisting of integer number.
+
+    Database format: ``"int:<value>"``
+
+    Value is padded with zeros to 19 characters.
+    """
+
+    symbol = "int"
+
+    def __init__(self, value=0):
+        assert isinstance(value, int)
+        self.value = value
+
+    def __add__(self, other):
+        return IntegerScore(self.value + other.value)
+
+    def __eq__(self, other):
+        if not isinstance(other, IntegerScore):
+            return self.value == other
+        return self.value == other.value
+
+    def __lt__(self, other):
+        if not isinstance(other, IntegerScore):
+            return self.value < other
+        return self.value < other.value
+
+    def __str__(self):
+        return str(self.value)
+
+    def __unicode__(self):
+        return str(self.value)
+
+    def __repr__(self):
+        return f"IntegerScore({self.value})"
+
+    @classmethod
+    def _from_repr(cls, value):
+        return cls(int(value))
+
+    def _to_repr(self):
+        return f"{self.value:019d}"
+
+    def to_int(self):
+        return self.value

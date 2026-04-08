@@ -1,0 +1,51 @@
+{% extends "simple-centered-wide.html" %}
+{% load i18n mptt_tags portal_url compress static %}
+
+{% block title %}{% trans "Manage portal" %}{% endblock %}
+
+{% block styles %}
+    {{ block.super }}
+    {% compress css %}
+        <link rel="stylesheet" type="text/css" href="{% static 'jqtree/jqtree.css' %}">
+        <link rel="stylesheet" type="text/css" href="{% static 'portals/portal_tree.css' %}">
+    {% endcompress %}
+{% endblock %}
+
+{% block scripts %}
+    {{ block.super }}
+    <script src="{% static 'portal_tree.bundle.js' %}"></script>
+    <script>
+        $(function() {
+            init_portal_tree('{% portal_url portal=portal path='__PATH__' %}', '{% url 'move_node' %}');
+        });
+    </script>
+{% endblock %}
+
+{% block content %}
+    <h2>{% trans "Manage portal" %}</h2>
+    <p>{% trans "Short description of your portal:" %}</p>
+
+    <form method="post">
+        {% csrf_token %}
+        {% include 'ingredients/form.html' %}
+        <div class="form-group">
+                <button type="submit" class="btn btn-primary">
+                    {% if user.is_superuser %}
+                        {% trans "Save description and public option" %}
+                    {% else %}
+                        {% trans "Save description" %}
+                    {% endif %}
+                </button>
+        </div>
+    </form>
+
+    <p>{% trans "Drag and drop pages to reorganize the portal structure." %}</p>
+    <div id="tree" data-url="{% portal_url portal=portal action='portal_tree_json' %}">
+    </div>
+    <hr class="divider">
+    <div class="float-right">
+        <a role="button" href="{% portal_url portal=portal action='delete_portal' %}" class="btn btn-danger">
+            {% trans "Delete portal" %}
+        </a>
+    </div>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% load i18n check_perm get_user_name static %}
+
+{% if rows %}
+    {% if frozen %}
+        <div class="alert alert-info">{% trans "The ranking is frozen." %}</div>
+    {% endif %}
+    <div class="table-responsive-md">
+        <table class="{% block table-classes %}table table-sm submission{% endblock %}">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>{% trans "User" %}</th>
+                    <th class="text-center">{% trans "Score" %}</th>
+                    <th class="text-right">{% trans "Time" %}</th>
+                    {% for pi, statement_visible in problem_instances %}
+                        {% if statement_visible %}
+                            {% url 'problem_statement' contest_id=contest.id problem_instance=pi.short_name as link %}
+                        {% endif %}
+                        <th class="text-center {% if pi.round.is_trial %}trial-round{% endif %}">
+                            {% if statement_visible %}
+                                <a href="{{ link }}">
+                            {% endif %}
+                                    {{ pi.get_short_name_display }}
+                            {% if statement_visible %}
+                                </a>
+                            {% endif %}
+                        </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr>
+                        <td>{{ row.place }}</td>
+                        <td>{% public_name row.user %}</td>
+                        <td class="text-center"><strong>{{ row.sum.problems_solved }}</strong></td>
+                        <td class="text-right">{{ row.sum.total_time_repr }}</td>
+
+                        {% for result in row.results %}
+                            <td class="text-center {% if result.problem_instance.round.is_trial %}trial-round{% endif %}">
+                                {% if result and result.score.problems_solved %}
+                                    <div class="result {% if result and result.score.problems_solved %}submission--OK{% elif is_admin and result %}submission--IGN{% endif %}"
+                                          data-username="{{ row.user.username }}"
+                                          data-result_url="{{ result.url }}">
+                                        {{ result.score.penalties_count|add:"1" }}
+                                    </div>
+                                    <div>({{ result.score.time_passed_repr }})</div>
+                                {% elif is_admin and result %}
+                                   <div class="result"
+                                         data-username="{{ row.user.username }}"
+                                         data-result_url="{{ result.url }}">
+                                        ({{ result.score.penalties_count }})
+                                    </div>
+                                {% else %}
+                                    &#8211;
+                                {% endif %}
+                            </td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="empty-space-filler alert alert-info">
+        {% blocktrans %}Strange, there is no one in this ranking...{% endblocktrans %}
+    </div>
+{% endif %}
+
+<script type="text/javascript" src="{% static 'rankings/ranking_links.js' %}"></script>

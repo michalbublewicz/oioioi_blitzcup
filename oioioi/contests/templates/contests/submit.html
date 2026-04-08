@@ -1,0 +1,27 @@
+{% extends "base-with-menu.html" %}
+{% load i18n static simple_filters %}
+
+{% block title %}{% trans "Submit solution" %}{% endblock %}
+
+{% block main-content %}
+<h2>{% trans "Submit solution" %}</h2>
+<h4 id="submissions-left"></h4>
+<form enctype="multipart/form-data" method="post">
+    {% include "public_message/show.html" %}
+    {% csrf_token %}
+    {% include "ingredients/form.html" %}
+    <div class="form-group">
+        <button type="submit" class="btn btn-primary">
+            {% trans "Submit" %}
+        </button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+{{ block.super }}
+<script src="{{ STATIC_URL }}contests/display-submissions-left.js"></script>
+<script>
+    displaySubmissionsLeft({{ submissions_left | json_parse }});
+</script>
+{% endblock %}

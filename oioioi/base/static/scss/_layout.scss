@@ -1,0 +1,33 @@
+@import "utility";
+@import "bootstrap/scss/grid";
+
+$oioioi-narrow-input-max-width: 300px !default;
+
+.empty-space-filler {
+  margin-top: $padding-large-vertical;
+}
+
+.empty-space-filler-bottom {
+  margin-bottom: $padding-large-vertical;
+}
+
+.no-left-padding {
+  padding-left: 0;
+}
+
+.padding-bottom-md {
+  padding-bottom: 1em;
+}
+
+.h-scrollable {
+  overflow-x: auto;
+}
+
+.oioioi-narrow-input {
+  max-width: $oioioi-narrow-input-max-width;
+}
+
+.oioioi-form__container {
+  @extend .container;
+  max-width: $oioioi-form-max-width;
+}

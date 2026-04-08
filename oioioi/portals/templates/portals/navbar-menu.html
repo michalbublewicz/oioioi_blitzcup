@@ -1,0 +1,21 @@
+{% load menu check_perm i18n all_with_prefix portal_url simple_filters simple_tags node_language_version %}
+
+<a href="#" type="button" class="dropdown-toggle" data-toggle="dropdown" aria-expanded="false">
+    <span class="sr-only">{% trans "Toggle navigation" %}</span>
+    <i class="fa-solid fa-bars"></i>
+</a>
+<div class="dropdown-menu">
+    {% for ancestor in current_node.get_ancestors %}
+        <a class="dropdown-item d-lg-none" href="{% portal_url node=ancestor %}">
+            {{ ancestor|full_name:request }}
+        </a>
+        <div class="dropdown-divider d-lg-none" role="separator"></div>
+    {% endfor %}
+    <a class="dropdown-item active" href="{% portal_url node=current_node %}">{{ current_node|full_name:request }}</a>
+    {% for child in current_node.get_children %}
+        <a class="dropdown-item" href="{% portal_url node=child %}">
+           <i class="fa-solid fa-chevron-right"></i>
+            {{ child|full_name:request }}
+        </a>
+    {% endfor %}
+</div>

@@ -1,0 +1,25 @@
+{% load simple_filters %}
+
+<div class="table-responsive-md">
+    <table class="table">
+        <caption>{% if data %}{{ plot_name }}{% endif %}</caption>
+        <thead>
+            <tr>
+                <th></th>
+                {% for key in keys %}
+                    <th>{{ key }}</th>
+                {% endfor %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for name, row in series|zip:data %}
+                <tr>
+                    <th>{{ name }}</th>
+                    {% for value in row %}
+                        <td>{{ value }}</td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

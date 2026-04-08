@@ -1,0 +1,147 @@
+[
+  {
+    "pk": 1103,
+    "model": "auth.user",
+    "fields": {
+      "username": "test_observer",
+      "first_name": "Test",
+      "last_name": "Observer",
+      "is_active": true,
+      "is_superuser": false,
+      "is_staff": false,
+      "last_login": "2012-07-31T20:27:58.768Z",
+      "groups": [],
+      "user_permissions": [],
+      "password": "",
+      "email": "test_observer@example.com",
+      "date_joined": "2012-07-31T20:27:58.768Z"
+    }
+  },
+    {
+        "pk": 1104,
+        "model": "auth.user",
+        "fields": {
+            "username": "test_contest_admin",
+            "first_name": "Test",
+            "last_name": "Contest admin",
+            "is_active": true,
+            "is_superuser": false,
+            "is_staff": false,
+            "last_login": "2012-07-31T20:27:58.768Z",
+            "groups": [],
+            "user_permissions": [],
+            "password": "",
+            "email": "test_contest_admin@example.com",
+            "date_joined": "2012-07-31T20:27:58.768Z"
+        }
+    },
+    {
+        "pk": 1105,
+        "model": "auth.user",
+        "fields": {
+            "username": "test_personal_data_user",
+            "first_name": "Test",
+            "last_name": "Personal data",
+            "is_active": true,
+            "is_superuser": false,
+            "is_staff": false,
+            "last_login": "2012-07-31T20:27:58.768Z",
+            "groups": [],
+            "user_permissions": [],
+            "password": "",
+            "email": "test_personal_data@example.com",
+            "date_joined": "2012-07-31T20:27:58.768Z"
+        }
+    },
+    {
+        "pk": 1106,
+        "model": "auth.user",
+        "fields": {
+            "username": "test_contest_basicadmin",
+            "first_name": "Test",
+            "last_name": "Contest basicadmin",
+            "is_active": true,
+            "is_superuser": false,
+            "is_staff": false,
+            "last_login": "2012-07-31T20:27:58.768Z",
+            "groups": [],
+            "user_permissions": [],
+            "password": "",
+            "email": "test_personal_data@example.com",
+            "date_joined": "2012-07-31T20:27:58.768Z"
+        }
+    },
+    {
+        "pk": 1107,
+        "model": "auth.user",
+        "fields": {
+            "username": "test_contest_owner",
+            "first_name": "Test",
+            "last_name": "Contest owner",
+            "is_active": true,
+            "is_superuser": false,
+            "is_staff": false,
+            "last_login": "2012-07-31T20:27:58.768Z",
+            "groups": [],
+            "user_permissions": [],
+            "password": "",
+            "email": "test_personal_data@example.com",
+            "date_joined": "2012-07-31T20:27:58.768Z"
+        }
+    },
+  {
+    "pk": 1,
+    "model": "contests.contestpermission",
+    "fields": {
+      "permission": "contests.contest_admin",
+      "user": [
+        "test_contest_admin"
+      ],
+      "contest": "c"
+    }
+  },
+  {
+    "pk": 2,
+    "model": "contests.contestpermission",
+    "fields": {
+      "permission": "contests.contest_observer",
+      "user": [
+        "test_observer"
+      ],
+      "contest": "c"
+    }
+  },
+  {
+    "pk": 3,
+    "model": "contests.contestpermission",
+    "fields": {
+      "permission": "contests.personal_data",
+      "user": [
+        "test_personal_data_user"
+      ],
+      "contest": "c"
+    }
+  },
+  {
+    "pk": 4,
+    "model": "contests.contestpermission",
+    "fields": {
+      "permission": "contests.contest_basicadmin",
+      "user": [
+        "test_contest_basicadmin"
+      ],
+      "contest": "c"
+    }
+  },
+  {
+    "pk": 5,
+    "model": "contests.contestpermission",
+    "fields": {
+      "permission": "contests.contest_owner",
+      "user": [
+        "test_contest_owner"
+      ],
+      "contest": "c"
+    }
+  }
+]

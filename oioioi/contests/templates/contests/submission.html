@@ -1,0 +1,95 @@
+{% extends "base-with-menu.html" %}
+{% load i18n %}
+
+{% block title %}
+{% blocktrans with submission.id as id %}Submission {{ id }}{% endblocktrans %}
+{% endblock %}
+
+{% block scripts %}
+    {{ block.super }}
+    <script type="text/javascript">
+        $(document).ready(function () {
+            {% if can_admin %}
+                $('[data-parent-toggle]').on('click', function () {
+                    var $t = $($(this).data('target')),
+                        $report_row = $t.parent();
+                    $report_row.toggle('fast');
+                    $t.collapse('reset');
+                });
+            {% endif %}
+            $(window).on('submissionUpdated', (event, data) => {
+                if(data.submissionId == {{ submission.id }}) {
+                    location.reload();
+                }
+            });
+        });
+    </script>
+{% endblock %}
+
+{% block main-content %}
+<article>
+    {{ header }}
+    <div class="row">
+        {% for report in reports %}
+            <div class="{% if submission.status != 'CE' and submission.status != 'SE' %}col-xl-6{% endif %}">
+                {{ report }}
+            </div>
+        {% endfor %}
+        {% if submission.status == 'SE' %}
+            <div class="alert alert-info col-xl-12">
+                <i class="fa-solid fa-circle-info"></i>
+                {% trans "Something went wrong on our side when judging your submission... Try again later or contact the administration if this issue persists." %}
+            </div>
+        {% endif %}
+    </div>
+    {% if can_admin %}
+        <h4>
+            <button type="button" class="btn btn-outline-secondary btn-sm"
+                    data-toggle="collapse" data-target="#hidden-reports">
+                <i class="fa-solid fa-chevron-down"></i>
+            </button>
+            <span>{% trans "Hidden reports" %}</span>
+        </h4>
+        <div id="hidden-reports" class="collapse table-responsive-md">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>{% trans "Actions" %}</th>
+                        <th>{% trans "ID" %}</th>
+                        <th>{% trans "Creation date" %}</th>
+                        <th>{% trans "Kind" %}</th>
+                        <th>{% trans "Status" %}</th>
+                        <th>{% trans "Score" %}</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for report in all_reports %}
+                        <tr>
+                            <td>
+                                <button type="button" class="btn btn-outline-secondary btn-sm"
+                                        data-async-toggle="collapse"
+                                        data-target="#hidden-report-{{ report.id }}">
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </button>
+                            </td>
+                            <td>{{ report.id }}</td>
+                            <td>{{ report.creation_date }}</td>
+                            <td>{{ report.get_kind_display }}</td>
+                            <td>{{ report.get_status_display }}</td>
+                            <td>{{ report.score_report.get_score_display }}</td>
+                        </tr>
+                        <tr class="padded-collapsing-content">
+                            <td colspan=100>
+                                <div id="hidden-report-{{ report.id }}"
+                                     data-loadurl="{% url 'report' submission_id=submission.id report_id=report.id %}"
+                                     class="collapse col-xl-6"></div>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+    {{ footer }}
+</article>
+{% endblock %}

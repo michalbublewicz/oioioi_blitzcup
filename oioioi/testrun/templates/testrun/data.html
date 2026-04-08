@@ -1,0 +1,23 @@
+{% load i18n %}
+
+<h4>{{ header }}</h4>
+
+{% if decode_error %}
+    {% include "programs/file_decoding_error.html" %}
+{% endif %}
+<pre>{{ data }}</pre>
+{% if left > 0 %}
+    <div class="alert alert-info">
+        <small>
+            {% blocktrans count left=left trimmed %}
+                One byte truncated.
+            {% plural %}
+                Bytes truncated: {{ left }}.
+            {% endblocktrans %}
+            {% blocktrans trimmed %}
+                You can download the entire file
+                <a href="{{ download_url }}">here</a>.
+            {% endblocktrans %}
+        </small>
+    </div>
+{% endif %}

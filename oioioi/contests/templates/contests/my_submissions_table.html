@@ -1,0 +1,87 @@
+{% load i18n %}
+
+{% if not hide_reports %}
+<script>
+{% for record in submissions %}
+    $(document).ready(function() {
+        $("#report{{ record.submission.id }}").hide();
+        function reloadContent() {
+            {% url 'get_report_HTML' submission_id=record.submission.id as link %}
+            $("#report{{ record.submission.id }}div").load("{{ link }}");
+            $("#report{{ record.submission.id }}div").addClass("col-xl-6");
+        }
+        function setRowClickable() {
+            var elements = $("[id^=submission{{ record.submission.id }}]");
+            elements.addClass("clickable");
+            elements.click(()=>{
+                reloadContent();
+                $("#report{{ record.submission.id }}").toggle("fast");
+            });
+        }
+        setRowClickable();
+
+        $(window).on('submissionUpdated', (event, data) => {
+            if(data.submissionId == {{ record.submission.id }}) {
+                {% url 'get_report_row_begin_HTML' submission_id=record.submission.id as link_row %}
+                $.post(
+                    "{{ link_row }}", 
+                    {
+                        show_scores: "{{ show_scores }}" == "True",
+                        shortened: "{{ shortened }}" == "True",
+                        inside_problem_view: "{{ inside_problem_view }}" == "True",
+                        can_admin: "{{ can_admin }}" == "True",
+                        csrfmiddlewaretoken: '{{ csrf_token }}'
+                    },
+                    (data) => {
+                        $("#report{{ record.submission.id }}row").replaceWith(data + 
+                            `{% block more-columns-after-updated %}{% endblock %}` +
+                            `{% include 'contests/my_submission_table_base_row_end.html' %}`);
+                        setRowClickable();
+                });
+                reloadContent();
+            }
+        });
+    });
+{% endfor %}
+</script>
+{% endif %}
+<div class="table-responsive-md">
+    <table class="{% block table-classes %}table table-sm submission{% endblock %}">
+        <thead>
+            <tr>
+                <th class="submission__margin submission--{{ record.submission.status }}"></th>
+                <th>{% trans "Submission time" %}</th>
+                {% if not inside_problem_view %}
+                    <th>{% trans "Problem" %}</th>
+                {% endif %}
+                <th>{% trans "Kind" %}</th>
+                <th>{% trans "Status" %}</th>
+                {% if show_scores %}
+                    <th>{% trans "Score" %}</th>
+                {% endif %}
+                <th class="details-th">{% trans "Details" %}</th>
+                {% block more-headers-after %}{% endblock %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for record in submissions %}
+                {% include 'contests/my_submission_table_base_row_begin.html' %}
+                {% block more-columns-after %}{% endblock %}
+                {% include 'contests/my_submission_table_base_row_end.html' %}
+                {% if record.can_see_comment and not hide_reports %}
+                    <tr class="padded-collapsing-content">
+                        <td colspan="100">
+                            <div id="report{{ record.submission.id }}">
+                                  <div id="report{{ record.submission.id }}div">
+                                      <div class="text-center">
+                                          {% trans "No reports are available" %}
+                                      </div>
+                                  </div>
+                            </div>
+                        </td>
+                    </tr>
+                {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+</div>

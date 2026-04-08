@@ -1,0 +1,9 @@
+
+<div class="line-numbers diff-highlight"><pre>
+{% for line in source %}<span class="diff-highlight diff-highlight__num {{line.css_class}}">{{ line.number }}</span>
+{% endfor %}
+</pre></div>
+<div class="code diff-highlight"><pre>
+{% for line in source %}<span class="diff-highlight diff-highlight__line {{line.css_class}}">{{ line.text }}</span>
+{% endfor %}
+</pre></div>

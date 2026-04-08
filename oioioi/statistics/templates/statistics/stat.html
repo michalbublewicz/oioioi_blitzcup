@@ -1,0 +1,24 @@
+{% extends "base-with-menu.html" %}
+{% load i18n pagination_tags %}
+
+{% block title %}{% trans "Statistics" %}{% endblock %}
+
+{% block main-content %}
+    {{ head|safe }}
+
+    {% include "statistics/statistics-header.html" %}
+
+    {% if plots %}
+        <div>
+            {% for plot in plots %}
+                <div class="plot">
+                    {{ plot }}
+                </div>
+            {% endfor %}
+        </div>
+    {% else %}
+        <div class="alert alert-info">
+            {% trans "No plots are available at the moment." %}
+        </div>
+    {% endif %}
+{% endblock %}

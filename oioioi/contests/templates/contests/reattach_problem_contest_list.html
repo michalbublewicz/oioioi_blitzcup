@@ -1,0 +1,51 @@
+{% extends "base-with-menu.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Attach problem" %}{% endblock %}
+
+{% block main-content %}
+<h2>
+    {% blocktrans %} Contest choice {% endblocktrans %}
+</h2>
+<p>
+    {% blocktrans %}Choose a contest to attach the following problems to: {% endblocktrans %}
+    <ul class="list-group d-inline-block">
+        {% for problem in problem_instances %}
+            <li class="list-group-item">{{ problem }}</li>
+        {% endfor %}
+    </ul>
+</p>
+
+<div class="table-responsive-md row">
+    <div class="col-md-6">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>{% trans "Contest ID" %}</th>
+                    <th>{% trans "Name" %}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for contest in contest_list %}
+                <tr>
+                    <td>{{ contest.id }}</td>
+                    <td><a href="{% url 'reattach_problem_confirm' contest.id %}/?ids={{ problem_ids }}">
+                            {{ contest.name }}
+                        </a>
+                        {% if contest.is_archived %}
+                            <span class="badge badge-warning">{% trans "Archived" %}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% if not full_list %}
+    <a class="btn btn-outline-secondary"
+       href="{% url 'reattach_problem_contest_list' 'full' %}/?ids={{ problem_ids }}">
+        {% trans "More" %}
+    </a>
+{% endif %}
+{% endblock %}

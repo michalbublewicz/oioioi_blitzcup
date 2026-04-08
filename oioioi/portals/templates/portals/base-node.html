@@ -1,0 +1,39 @@
+{% extends "base-with-menu.html" %}
+{% load i18n mptt_tags menu breadcrumbs %}
+
+{% block title %}{{ current_lang_version.full_name }}{% endblock %}
+
+{% block menu %}
+    {% include "portals/menu.html" %}
+{% endblock %}
+
+{% block navbar-logo %}
+    {% include "portals/navbar-logo-with-menu.html" %}
+{% endblock %}
+
+{% block main-content %}
+    <div class="d-none d-lg-block">
+        {% block portal_breadcrumbs %}
+            {% breadcrumbs %}
+        {% endblock %}
+    </div>
+    {% generate_menu portal_admin_menu %}
+    {% if menu %}
+        <ul class="nav nav-tabs mb-3">
+            {% for item in menu %}
+                {{ item.name }}
+                <li class="nav-item">
+                    <a class="nav-link {% if item.url == request.get_full_path %}active{% endif %}" href="{{ item.url }}" {{ item.attrs }}>
+                        {% if item.icon %}
+                            <i class="fa-solid fa-{{ item.icon }}"></i>
+                        {% endif %}
+                        {{ item.text }}
+                    </a>
+                </li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+    <section>
+        {% block panel %}{% endblock %}
+    </section>
+{% endblock %}

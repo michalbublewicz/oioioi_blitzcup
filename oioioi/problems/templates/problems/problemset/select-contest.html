@@ -1,0 +1,18 @@
+{% extends "problems/problemset/base.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block main_content %}
+
+<h3>{% blocktrans %}Select contest to add the <code>{{ problem_name }}</code> problem to {% endblocktrans %}</h3>
+
+{% include "problems/problemset/contest-list.html" with contests=administered_contests %}
+
+<form id="add_to_contest" method="post"  class="d-none">
+    {% csrf_token %}
+    <input id="url_key" name="url_key" type="hidden">
+</form>
+
+<script type="text/javascript" src="{{ STATIC_URL }}problems/problemset/add-to-contest.js"></script>
+
+{% endblock %}

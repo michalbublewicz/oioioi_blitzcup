@@ -1,0 +1,18 @@
+{% extends "simple-centered.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Registration completed" %}{% endblock %}
+
+{% block content %}
+<div class="text-center">
+    <p>{% trans "Your account is now active. You may go ahead and log in now." %}</p>
+    <p>
+        <a role="button" href="{% url 'auth_login' %}" class="btn btn-primary">
+            {% trans "Log in" %}
+        </a>
+        <a role="button" href="{% url 'add_teacher' %}" class="btn btn-outline-secondary">
+            {% trans "Request teacher account" %}
+        </a>
+    </p>
+</div>
+{% endblock %}

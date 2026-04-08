@@ -1,0 +1,7 @@
+{% load i18n pagination_tags %}
+
+<h4>{% trans "Other submissions for this problem" %}</h4>
+
+{% autopaginate submissions submissions_on_page %}
+{% include "programs/my_submissions_table_diff.html" %}
+{% paginate %}

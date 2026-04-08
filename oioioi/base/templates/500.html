@@ -1,0 +1,20 @@
+{% extends "simple-centered-wide.html" %}
+
+{% load i18n %}
+
+{% block content %}
+    <div class="text-center">
+        <h1>500</h1>
+        <p class="django-http-error-message">
+            {% trans "Holy guacamole, internal server error!" %}
+        </p>
+    </div>
+
+    {% if user.is_superuser %}
+        <pre id="traceback500" class="scroll-x">{{ traceback }}</pre>
+    {% endif %}
+
+    <div class="text-center">
+        <p><small>{% trans "A report has been emailed to the admins. They will love it." %}</small></p>
+    </div>
+{% endblock %}

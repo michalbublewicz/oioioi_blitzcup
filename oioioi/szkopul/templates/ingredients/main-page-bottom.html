@@ -1,0 +1,18 @@
+{% load i18n static newsfeed %}
+
+<h3>{% trans "News" %}</h3>
+<p>{% newsfeed %}</p>
+
+<h3>{% trans "Contact us" %}</h3>
+<p>
+    {% trans "Send Feedback" as send_feedback %}
+    {% blocktrans trimmed %}
+        Do you have any questions or feedback? Is something wrong? Use the
+        {{ send_feedback }} button in the corner of the page.
+    {% endblocktrans %}
+</p>
+
+<h3>{% trans "We are supported by" %}</h3>
+<div id="supporters">
+    <img id="projekt-map" src="/static/szkopul/znaki-post.jpg" alt="MAP">
+</div>

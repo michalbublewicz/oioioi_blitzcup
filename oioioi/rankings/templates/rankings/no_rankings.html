@@ -1,0 +1,11 @@
+{% extends "base-with-menu.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "No rankings available" %} - {% trans "Ranking" %}{% endblock %}
+
+{% block main-content %}
+<h1>{% trans "Ranking" %}</h1>
+<div class="empty-space-filler text-center">
+    {% blocktrans %}No rankings available.{% endblocktrans %}
+</div>
+{% endblock %}

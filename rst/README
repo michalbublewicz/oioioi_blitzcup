@@ -1,0 +1,19 @@
+==============================
+OIOIOI DEVELOPER DOCUMENTATION
+==============================
+
+REQUIREMENTS
+============
+Generation of documentation requires sphinx and related packages.
+You can install them with:
+$ uv sync --group docs
+
+BUILDING HTML DOC
+=================
+To build a html documentation simply run:
+$ make html
+
+MORE INFO
+=========
+To get more information about documentation format please visit:
+http://sphinx.pocoo.org/

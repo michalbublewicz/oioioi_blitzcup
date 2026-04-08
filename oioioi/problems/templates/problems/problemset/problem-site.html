@@ -1,0 +1,45 @@
+{% extends "problems/problemset/base.html" %}
+{% load i18n %}
+{% load static %}
+
+{% block title %}{{ problem }} - {% trans "Problemset" %}{% endblock %}
+
+{% block main_content %}
+
+    <div class="problem-title text-center content-row">
+        <h1>{{ problem }}</h1>
+        {% if show_proposal_form %}
+            <i id="open-form" type="button" class="fa-solid fa-circle-exclamation tagform-icon clickable ml-2" data-toggle="modal"
+                  data-target="#tag-form"></i>
+        {% endif %}
+    </div>
+
+    {% include "problems/ingredients/tag-form.html" %}
+
+    <ul class="nav nav-tabs mb-3">
+        {% for tab in tabs %}
+            {% if tab.obj.key != 'add_to_contest' %}
+                <li class="nav-item">
+                    <a class="nav-link {% if tab.obj == current_tab %}active{% endif %}" href="{{ tab.link }}">{{ tab.obj.title }}</a>
+                </li>
+            {% elif show_add_button and not can_admin_problem %}
+                <li class="nav-item">
+                    <a class="nav-link {% if tab.obj == current_tab %}active{% endif %}" href="{{ tab.link }}">{{ tab.obj.title }}</a>
+                </li>
+            {% endif %}
+        {% endfor %}
+    </ul>
+    <div class="nav-content">
+        {{ content }}
+    </div>
+
+    <form id="add_to_contest" method="post"  class="d-none">
+        {% csrf_token %}
+        <input id="url_key" name="url_key" type="hidden">
+    </form>
+
+    <script type="text/javascript" src="{{ STATIC_URL }}problems/problemset/add-to-contest.js"></script>
+    <script type="text/javascript" src="{{ STATIC_URL }}problems/problemset/tag-form.js"></script>
+    <script type="text/javascript">var problemsiteKey = "{{ problemsite_key }}"; </script>
+
+{% endblock %}

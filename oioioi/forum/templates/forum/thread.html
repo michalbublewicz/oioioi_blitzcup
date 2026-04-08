@@ -1,0 +1,48 @@
+{% extends "forum/forum-base.html" %}
+{% load i18n %}
+{% load check_perm %}
+{% load get_user_name %}
+{% load pagination_tags %}
+
+{% block title %}{% trans "Thread" %}: {{ thread.name }}{% endblock %}
+
+{% block forum-head %}
+    <h2>{% trans "Thread" %}: {{ thread.name }}</h2>
+{% endblock %}
+
+{% block forum-contents %}
+    {% autopaginate post_set forum_posts_per_page %}
+    {% paginate %}
+    <div class="card-column mb-3">
+        {% for post in post_set %}
+            <div class="card mb-2" id="forum-post-{{ post.id }}">
+                <div class="anchor-jump-fix" id="forum-anchor-{{ post.id }}"></div>
+                {% if post.hidden %}
+                    <div class="card-header">
+                        {% include "forum/thread-element-heading.html" with post=post %}
+                    </div>
+                {% endif %}
+                {% if not post.hidden or is_admin %}
+                    <div class="card-body {% if post.hidden %} collapse {% endif %}">
+                        {{ post.content|urlize|linebreaksbr }}
+                    </div>
+                {% endif %}
+                <div class="card-footer forum-card-footer">
+                    {% include "forum/thread-element-footer.html" with post=post %}
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+    {% paginate %}
+    {% if form %}
+        <h4>{% trans "New post" %}</h4>
+        <form method="post">
+            {% include "public_message/show.html" %}
+            {% csrf_token %}
+            {% include "ingredients/form.html" with focus=False display_labels=False %}
+            <div class="form-group">
+                <button type="submit" class="btn btn-primary">{% trans "Submit" %}</button>
+            </div>
+        </form>
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,6 @@
+# robots.txt for OIOIOI
+
+# Prevent GoogleBot from trying to index the main page with query argument,
+# as this generates annoying emails.
+User-Agent: *
+Disallow: /?

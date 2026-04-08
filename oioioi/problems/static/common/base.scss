@@ -1,0 +1,83 @@
+@import "scss/utility";
+
+.button-flat button {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.search-row {
+  display: flex;
+  justify-content: space-evenly;
+  margin: 4rem 0 2rem 0;
+}
+
+.search-bar {
+  margin: 0 0 1rem 0;
+}
+
+.filter-bar {
+  margin: 0 0 1rem 0;
+}
+
+.tag-proposal-checkbox-row {
+  margin: 2rem 0 2rem 0;
+}
+
+.tabbed-content {
+  margin-top: 7rem;
+}
+
+.menu-link-green {
+  background-color: #c0ffc0;
+}
+
+#tag-row {
+  display: flex;
+  flex-flow: row wrap;
+  width: 100%;
+}
+
+.origintag-group {
+  display: flex;
+}
+
+.search-tag-root .search-tag {
+  padding-top: 0.3em;
+  padding-bottom: 0.3em;
+  margin: .2em;
+}
+
+.search-tag-text {
+  cursor: default;
+}
+
+.tag-label-origin {
+    background-color: #C3A877;
+    color: #000;
+}
+.tag-label-algorithm {
+    background-color: #2A2C59;
+    color: #fff;
+}
+.tag-label-difficulty {
+    background-color: #2DB941;
+    color: #fff;
+}
+
+.tag-label-algorithm-proposal {
+  background-color: #91c5f5;
+  color: #000;
+}
+
+.tag-label-difficulty-proposal {
+  background-color: #90EE90;
+  color: #000;
+}
+
+.tag-proposal-amount {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  background-color: #e4e4e4;
+  color: #000;
+}

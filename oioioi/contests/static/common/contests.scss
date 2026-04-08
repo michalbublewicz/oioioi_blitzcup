@@ -1,0 +1,62 @@
+@import "scss/utility";
+
+$list-grid-column-min-width: 70px !default;
+$list-grid-column-count: 5 !default;
+$list-subheader-bgcolor: #eee !default;
+
+.table .report-group-score {
+  vertical-align: middle;
+  text-align: right;
+}
+
+.table td, .table th{
+  vertical-align: middle !important;
+}
+
+.list-grid {
+    columns: $list-grid-column-min-width $list-grid-column-count;
+}
+
+.table-sm .padded-collapsing-content {
+  > * {
+    padding: 0;
+  }
+
+  .collapsing, .in {
+    padding: $table-cell-padding-sm;
+  }
+}
+
+.form-list-unstyled {
+  ul {
+    // Should be @extend .list-unstyled
+    // but it requires whole scss/style
+    // which increases bundle size dramatically
+    padding-left: 0;
+    list-style: none;
+  }
+}
+
+table.table-striped > tbody > tr.problemlist-subheader {
+    background-color: $list-subheader-bgcolor;
+}
+
+.centered-title {
+    margin: 3rem;
+    margin-bottom: 4rem;
+}
+
+.problem-name-column {
+    width: 100%;
+}
+
+.problem-limits-row {
+    background-color: transparent !important;
+    border-color: transparent !important;
+    white-space: nowrap;
+}
+
+.problem-limits-row td {
+    border: none;
+    white-space: nowrap;
+}

@@ -1,0 +1,36 @@
+{% load i18n %}
+
+{% if not is_up_to_date %}
+<div class="text-center" id="outdated-ranking-msg">
+    <div class="badge badge-danger">
+        {% blocktrans %}
+            We're generating the ranking right now.
+            The data shown in here can be slightly outdated.
+        {% endblocktrans %}
+    </div>
+</div>
+
+<script>
+$(function() {
+  // Attach message a moment before it touches the main navbar
+  var navbar_height = $('#oioioi-navbar').height();
+  var msg = $('#outdated-ranking-msg');
+  var msg_offset = msg.offset().top;
+
+  function sticky_relocate() {
+    var user_scroll = $(window).scrollTop();
+    if (user_scroll + navbar_height > msg_offset) {
+      msg.addClass('outdated-ranking-msg-float');
+    } else {
+      msg.removeClass('outdated-ranking-msg-float');
+    }
+  }
+
+  $(window).scroll(sticky_relocate);
+  sticky_relocate();
+});
+</script>
+{% endif %}
+
+{{ ranking_html }}
+

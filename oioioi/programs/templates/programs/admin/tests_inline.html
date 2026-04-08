@@ -1,0 +1,103 @@
+{% load i18n %}
+
+<div class="card mb-2" id="tests">
+    <div class="card-header py-2">
+        <h5 class="mb-0">{{ inline_admin_formset.opts.verbose_name_plural|capfirst }}</h5>
+    </div>
+    <div class="card-body py-2">
+        {{ inline_admin_formset.formset.management_form }}
+        {% if inline_admin_formset.formset.non_form_errors %}
+            <div class="alert alert-danger">
+                {% for error in inline_admin_formset.formset.non_form_errors %}
+                    <p>{{ error }}</p>
+                {% endfor %}
+            </div>
+        {% endif %}
+        <table class="table table-sm table-striped table-hover">
+            <thead class="table-borderless">
+                <tr>
+                    {% for field in inline_admin_formset.fields %}
+                        <th>{{ field.label|capfirst }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for inline_admin_form in inline_admin_formset %}
+                    {% if inline_admin_form.form.non_field_errors %}
+                        <div class="alert alert-danger">
+                            {% for error in inline_admin_form.form.non_field_errors %}
+                                <p>{{ error }}</p>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <tr>
+                        {% for fieldset in inline_admin_form %}
+                            {% for line in fieldset %}
+                                {% for field in line %}
+                                    <td {% if field.field.errors %}class="danger"{% endif %}>
+                                        {% if field.is_readonly %}
+                                            {{ field.contents }}
+                                        {% else %}
+                                            {{ field.field }}
+                                            {% for error in field.field.errors %}
+                                                {{ error }}
+                                            {% endfor %}
+                                        {% endif %}
+                                    </td>
+                                {% endfor %}
+                            {% endfor %}
+                        {% endfor %}
+                        {{ inline_admin_form.pk_field.field }}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <div><p>{% blocktrans %}Use TAB to effectively move between the boxes. Use Shift-Enter to copy the current value down up to the end of the table.{% endblocktrans %}</p></div>
+    </div>
+</div>
+
+<script type="text/javascript">
+(function($) {
+    $(document).ready(function($) {
+        // Set up taborder.
+        var i = 0;
+        var testindexes = {};
+        var inputs = $('#tests input[type=number]');
+        inputs.each(function(index, elem) {
+            $(elem).attr('autocomplete', 'off');
+            if (elem.id.indexOf('time_limit') != -1)
+                $(elem).attr('tabindex', i + 1000);
+            else if (elem.id.indexOf('memory_limit') != -1)
+                $(elem).attr('tabindex', i + 2000);
+            else if (elem.id.indexOf('max_score') != -1)
+                $(elem).attr('tabindex', i + 3000);
+            testindexes[elem.id] = i;
+            i++;
+        });
+
+        // Shift-Enter copies the current value down.
+        inputs.keydown(function(e) {
+            if (e.shiftKey && e.keyCode == 13) {
+                e.preventDefault();
+                var split_target = e.target.id.split('-');
+                var target_value = $(e.target).val();
+                var target_number = testindexes[e.target.id];
+                inputs.each(function(index, elem) {
+                    var split_elem = elem.id.split('-');
+                    var elem_number = testindexes[elem.id];
+                    if (split_elem[2] == split_target[2] && elem_number > target_number) {
+                        $(elem).val(target_value);
+                        if (elem_number == target_number + 3) {
+                            $(elem).focus().select();
+                        }
+                    }
+                });
+            }
+        });
+
+        // Focus the fist input. Setting time limits it the most frequent
+        // operation.
+        inputs.first().focus().select();
+    });
+})(jQuery);
+</script>

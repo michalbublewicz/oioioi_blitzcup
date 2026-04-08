@@ -1,0 +1,24 @@
+@import "bootstrap/scss/functions";
+@import "bootstrap/scss/variables";
+@import "bootstrap/scss/mixins";
+
+#notifications_panel .dropdown-menu {
+  padding-bottom: 0;
+  min-width: 600px;
+  > li {
+    white-space: nowrap;
+    &.dropdown-header {
+      font-weight: bold;
+      font-size: 1.2em;
+      padding: 0.5em;
+    }
+    .table {
+      color: $body-color;
+      margin-bottom: 0;
+    }
+  }
+}
+
+#notifications_banner > * {
+  padding: 0.5em;
+}

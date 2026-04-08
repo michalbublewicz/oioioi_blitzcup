@@ -1,0 +1,21 @@
+{% load i18n %}
+
+<div class="tabbed-content">
+    {% if tabs|length > 1 %}
+        <ul class="nav nav-tabs mb-3">
+            {% for tab in tabs %}
+                <li class="nav-item">
+                    <a class="nav-link {% if tab.obj == current_tab %}active{% endif %}" href="{{ tab.link }}">{{ tab.obj.short_description }}</a></li>
+            {% endfor %}
+        </ul>
+        <div class="nav-content">
+            {{ content }}
+        </div>
+    {% else %}
+
+    {% if problem_name %}
+    <p>{% trans "Selected problem" %}: {{ problem_name }}</p>
+    {% endif %}
+        {{ content }}
+    {% endif %}
+</div>
