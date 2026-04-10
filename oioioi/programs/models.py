@@ -36,6 +36,13 @@ class ProgramsConfig(models.Model):
         verbose_name=_("execution mode"),
         help_text=_("If set to Auto, the execution mode is determined according to the type of the contest."),
     )
+    subtask_parallel_limit = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        default=None,
+        verbose_name=_('subtask parallel worker limit'),
+        help_text=_('Maximum number of tests from the same group run in parallel. Leave blank to keep current behavior.'),
+    )
 
     def __str__(self):
         return "Programs config"
@@ -271,6 +278,7 @@ submission_statuses.register("MLE", _("Memory limit exceeded"))
 submission_statuses.register("OLE", _("Output limit exceeded"))
 submission_statuses.register("SE", _("System error"))
 submission_statuses.register("RV", _("Rule violation"))
+submission_statuses.register("SKIP", _("Skipped"))
 
 submission_statuses.register("INI_OK", _("Initial tests: OK"))
 submission_statuses.register("INI_ERR", _("Initial tests: failed"))

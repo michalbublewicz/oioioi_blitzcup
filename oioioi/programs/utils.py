@@ -21,18 +21,26 @@ from oioioi.programs.models import (
 )
 
 
+def _non_skipped_results(results):
+    return [result for result in results.values() if result['status'] != 'SKIP']
+
+
 def sum_score_aggregator(group_results):
     if not group_results:
         return None, None, "OK"
 
-    scores = [ScoreValue.deserialize(result["score"]) for result in group_results.values()]
-    max_scores = [ScoreValue.deserialize(result["max_score"]) for result in group_results.values()]
+    status = aggregate_statuses([result["status"] for result in group_results.values()])
+    scored_results = _non_skipped_results(group_results)
+    if not scored_results:
+        return None, None, status
+
+    scores = [ScoreValue.deserialize(result["score"]) for result in scored_results]
+    max_scores = [ScoreValue.deserialize(result["max_score"]) for result in scored_results]
 
     # the sum below needs a start value of an appropriate type,
     # the default zero is not suitable
     score = sum(scores[1:], scores[0])
     max_score = sum(max_scores[1:], max_scores[0])
-    status = aggregate_statuses([result["status"] for result in group_results.values()])
 
     return score, max_score, status
 
@@ -43,12 +51,17 @@ def sum_group_scorer(test_results):
     if not test_results:
         return None, None, "OK"
 
-    scores = [ScoreValue.deserialize(result["score"]) for result in test_results.values()]
-    max_scores = [ScoreValue.deserialize(result["max_score"]) for result in test_results.values()]
+    sorted_results = sorted(test_results.values(), key=itemgetter("order"))
+    status = aggregate_statuses([result["status"] for result in sorted_results])
+    scored_results = _non_skipped_results(test_results)
+    if not scored_results:
+        return None, None, status
+
+    scores = [ScoreValue.deserialize(result["score"]) for result in scored_results]
+    max_scores = [ScoreValue.deserialize(result["max_score"]) for result in scored_results]
 
     score = sum(scores[1:], scores[0])
     max_score = sum(max_scores[1:], max_scores[0])
-    status = aggregate_statuses([result["status"] for result in test_results.values()])
 
     return score, max_score, status
 
@@ -60,22 +73,27 @@ class UnequalMaxScores(ValueError):
 def min_group_scorer(test_results):
     """Gets minimal result of all tests inside a test group."""
 
-    scores = [ScoreValue.deserialize(result["score"]) for result in test_results.values()]
-    max_scores = [ScoreValue.deserialize(result["max_score"]) for result in test_results.values()]
+    sorted_results = sorted(test_results.values(), key=itemgetter("order"))
+    status = aggregate_statuses([result["status"] for result in sorted_results])
+    scored_results = _non_skipped_results(test_results)
+    if not scored_results:
+        return None, None, status
+
+    scores = [ScoreValue.deserialize(result["score"]) for result in scored_results]
+    max_scores = [ScoreValue.deserialize(result["max_score"]) for result in scored_results]
 
     score = min(scores)
     max_score = min(max_scores)
     if max_score != max(max_scores):
         raise UnequalMaxScores("Tests in one group cannot have different max scores.")
 
-    sorted_results = sorted(test_results.values(), key=itemgetter("order"))
-    status = aggregate_statuses([result["status"] for result in sorted_results])
-
     return score, max_score, status
 
 
 def discrete_test_scorer(test, result):
     status = result["result_code"]
+    if status == "SKIP":
+        return None, None, status
     percentage = result.get("result_percentage", (100, 1))
     max_score = ceil(Fraction(*percentage) / 100.0 * test["max_score"])
     score = max_score if status == "OK" else 0
@@ -87,6 +105,8 @@ def threshold_linear_test_scorer(test, result):
     limit = test.get("exec_time_limit", 0)
     used = result.get("time_used", 0)
     status = result["result_code"]
+    if status == "SKIP":
+        return None, None, status
     percentage = result.get("result_percentage", (100, 1))
     max_score = ceil(Fraction(*percentage) / 100.0 * test["max_score"])
     test_max_score = IntegerScore(test["max_score"])

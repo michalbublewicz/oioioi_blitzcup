@@ -80,6 +80,7 @@ STATUS_CLASSES = {
     "INI_ERR": "badge-danger",
     "MSE": "badge-danger",
     "MCE": "badge-danger",
+    "SKIP": "badge-secondary",
 }
 
 

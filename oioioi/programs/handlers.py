@@ -36,6 +36,13 @@ TESTRUN_TEST_TASK_PRIORITY = 300
 DEFAULT_TEST_TASK_PRIORITY = 100
 # There is also TASK_PRIORITY in oioioi/sinolpack/package.py.
 
+SKIP_STATUS = 'SKIP'
+SKIP_TEST_COMMENT = _('Skipped after earlier failure in group')
+SKIP_SCHEDULER_GROUP_SCORERS = {
+    'oioioi.programs.utils.min_group_scorer',
+    'oioioi.acm.utils.acm_group_scorer',
+}
+
 
 def _make_filename(env, base_name):
     """Create a filename in the filetracker for storing outputs
@@ -140,6 +147,168 @@ def _override_tests_limits(language, tests):
         new_limits[new_rule.test.pk]["time_limit"] = new_rule.time_limit
 
     return new_limits
+
+
+def _matches_kind(test_env, kind):
+    return kind is None or test_env['kind'] == kind
+
+
+def _schedule_key(kind):
+    return kind if kind is not None else '__all__'
+
+
+def _supports_skip_scheduler(env):
+    return bool(env.get('subtask_parallel_limit')) and env.get('group_scorer', settings.DEFAULT_GROUP_SCORER) in SKIP_SCHEDULER_GROUP_SCORERS
+
+
+def _historical_test_stats(env, test_names):
+    if not test_names:
+        return {}
+
+    queryset = (
+        TestReport.objects.filter(
+            submission_report__submission__problem_instance_id=env['problem_instance_id'],
+            submission_report__submission__kind='NORMAL',
+            submission_report__status='ACTIVE',
+            submission_report__kind__in=['NORMAL', 'FULL'],
+            test_name__in=list(test_names),
+        )
+        .exclude(status=SKIP_STATUS)
+        .values_list('test_name', 'status', 'time_used')
+    )
+
+    stats = defaultdict(lambda: {'count': 0, 'failures': 0, 'time_total': 0})
+    for test_name, status, time_used in queryset:
+        entry = stats[test_name]
+        entry['count'] += 1
+        entry['time_total'] += time_used or 0
+        if status != 'OK':
+            entry['failures'] += 1
+
+    return {
+        test_name: {
+            'count': entry['count'],
+            'failure_probability': entry['failures'] / entry['count'],
+            'avg_time_used': entry['time_total'] / entry['count'],
+        }
+        for test_name, entry in stats.items()
+        if entry['count']
+    }
+
+
+def _historical_test_bonus(stat):
+    return (1 / (stat['count'] + 1)) / max(stat['avg_time_used'], 1)
+
+
+def _order_group_tests(env, group_name, group_tests, history_stats):
+    ordered_by_fallback = sorted(group_tests, key=lambda test: (test['order'], test['name']))
+    fallback_positions = {test['name']: position for position, test in enumerate(ordered_by_fallback)}
+
+    def sort_key(test):
+        stat = history_stats.get(test['name'])
+        if stat is None:
+            return (1, 0, fallback_positions[test['name']], test['name'])
+        heuristic = stat['failure_probability'] / max(stat['avg_time_used'], 1)
+        heuristic += _historical_test_bonus(stat)
+        return (0, -heuristic, test['order'], test['name'])
+
+    return [test['name'] for test in sorted(group_tests, key=sort_key)]
+
+
+def _build_schedule_state(env, kind):
+    tests_by_group = defaultdict(list)
+    for test in env['tests'].values():
+        if _matches_kind(test, kind) and test['to_judge']:
+            tests_by_group[test['group']].append(test)
+
+    history_stats = _historical_test_stats(
+        env,
+        [test['name'] for group_tests in tests_by_group.values() for test in group_tests],
+    )
+
+    return {
+        'groups': {
+            group_name: {
+                'pending': _order_group_tests(env, group_name, group_tests, history_stats),
+                'in_flight': [],
+                'failed': False,
+            }
+            for group_name, group_tests in tests_by_group.items()
+        }
+    }
+
+
+def _get_schedule_state(env, kind):
+    schedule_states = env.setdefault('test_scheduling', {})
+    key = _schedule_key(kind)
+    if key not in schedule_states:
+        schedule_states[key] = _build_schedule_state(env, kind)
+    return key, schedule_states[key]
+
+
+def _has_scheduled_work(state):
+    return any(group['pending'] or group['in_flight'] for group in state['groups'].values())
+
+
+def _pick_scheduled_batch(env, kind):
+    schedule_key, state = _get_schedule_state(env, kind)
+    limit = env['subtask_parallel_limit']
+    batch = []
+    for group_state in state['groups'].values():
+        if group_state['failed'] or not group_state['pending']:
+            group_state['in_flight'] = []
+            continue
+        batch_tests = group_state['pending'][:limit]
+        group_state['pending'] = group_state['pending'][limit:]
+        group_state['in_flight'] = list(batch_tests)
+        batch.extend(batch_tests)
+    return schedule_key, batch
+
+
+def _make_skip_result(test_env):
+    result = test_env.copy()
+    result.update(
+        {
+            'result_code': SKIP_STATUS,
+            'status': SKIP_STATUS,
+            'score': None,
+            'max_score': None,
+            'time_used': 0,
+            'result_string': str(SKIP_TEST_COMMENT),
+        }
+    )
+    return result
+
+
+def _finalize_scheduled_batch(env, kind):
+    schedule_key = env.pop('workers_jobs.schedule_key', _schedule_key(kind))
+    state = env.get('test_scheduling', {}).get(schedule_key)
+    if state is None:
+        return False
+
+    jobs = env.get('workers_jobs.results', {})
+    for group_state in state['groups'].values():
+        if not group_state['in_flight']:
+            continue
+        failed = any(jobs.get(test_name, {}).get('result_code') not in (None, 'OK') for test_name in group_state['in_flight'])
+        group_state['in_flight'] = []
+        if failed:
+            group_state['failed'] = True
+            for pending_test in group_state['pending']:
+                env['test_results'].setdefault(pending_test, {}).update(_make_skip_result(env['tests'][pending_test]))
+            group_state['pending'] = []
+
+    still_pending = any(group['pending'] for group in state['groups'].values())
+    if not _has_scheduled_work(state):
+        env.get('test_scheduling', {}).pop(schedule_key, None)
+    return still_pending
+
+
+def _prepend_next_batch(env, kind):
+    env['recipe'] = [
+        ('scheduled_run_tests', 'oioioi.programs.handlers.run_tests', {'kind': kind}),
+        ('scheduled_run_tests_end', 'oioioi.programs.handlers.run_tests_end', {'kind': kind}),
+    ] + env.get('recipe', [])
 
 
 @_skip_on_compilation_error
@@ -259,56 +428,76 @@ def run_tests(env, kind=None, **kwargs):
     """
     jobs = {}
     not_to_judge = []
-    for test_name, test_env in env["tests"].items():
-        if kind and test_env["kind"] != kind:
+    scheduled_batch = None
+    schedule_key = None
+    if _supports_skip_scheduler(env):
+        schedule_key, scheduled_batch = _pick_scheduled_batch(env, kind)
+        scheduled_batch = set(scheduled_batch)
+
+    for test_name, test_env in env['tests'].items():
+        if not _matches_kind(test_env, kind):
             continue
-        if not test_env["to_judge"]:
+        if not test_env['to_judge']:
             not_to_judge.append(test_name)
             continue
+        if scheduled_batch is not None and test_name not in scheduled_batch:
+            continue
+
         job = test_env.copy()
-        job["job_type"] = (env.get("exec_mode", "") + env.get("task_type_suffix", "-exec")).lstrip("-")
-        if kind == "INITIAL" or kind == "EXAMPLE":
-            job["task_priority"] = EXAMPLE_TEST_TASK_PRIORITY
-        elif env["submission_kind"] == "TESTRUN":
-            job["task_priority"] = TESTRUN_TEST_TASK_PRIORITY
+        job['job_type'] = (env.get('exec_mode', '') + env.get('task_type_suffix', '-exec')).lstrip('-')
+        if kind == 'INITIAL' or kind == 'EXAMPLE':
+            job['task_priority'] = EXAMPLE_TEST_TASK_PRIORITY
+        elif env['submission_kind'] == 'TESTRUN':
+            job['task_priority'] = TESTRUN_TEST_TASK_PRIORITY
         else:
-            job["task_priority"] = DEFAULT_TEST_TASK_PRIORITY
-        job["exe_file"] = env["compiled_file"]
-        job["exec_info"] = env["exec_info"]
-        job["check_output"] = env.get("check_outputs", True)
-        if env.get("checker"):
-            job["chk_file"] = env["checker"]
-        job["checker_format"] = env.get("checker_format", "english_abbreviated")
-        if env.get("save_outputs"):
-            job.setdefault("out_file", _make_filename(env, test_name + ".out"))
-            job["upload_out"] = True
-        if env.get("interactor_file"):
-            job["interactor_file"] = env["interactor_file"]
-        if env.get("num_processes"):
-            job["num_processes"] = env["num_processes"]
-        job["untrusted_checker"] = env["untrusted_checker"]
+            job['task_priority'] = DEFAULT_TEST_TASK_PRIORITY
+        job['exe_file'] = env['compiled_file']
+        job['exec_info'] = env['exec_info']
+        job['check_output'] = env.get('check_outputs', True)
+        if env.get('checker'):
+            job['chk_file'] = env['checker']
+        job['checker_format'] = env.get('checker_format', 'english_abbreviated')
+        if env.get('save_outputs'):
+            job.setdefault('out_file', _make_filename(env, test_name + '.out'))
+            job['upload_out'] = True
+        if env.get('interactor_file'):
+            job['interactor_file'] = env['interactor_file']
+        if env.get('num_processes'):
+            job['num_processes'] = env['num_processes']
+        job['untrusted_checker'] = env['untrusted_checker']
         jobs[test_name] = job
-    extra_args = env.get("sioworkers_extra_args", {}).get(kind, {})
-    env["workers_jobs"] = jobs
-    env["workers_jobs.extra_args"] = extra_args
-    env["workers_jobs.not_to_judge"] = not_to_judge
+
+    extra_args = env.get('sioworkers_extra_args', {}).get(kind, {})
+    env['workers_jobs'] = jobs
+    env['workers_jobs.extra_args'] = extra_args
+    env['workers_jobs.not_to_judge'] = not_to_judge
+    if schedule_key is not None:
+        env['workers_jobs.schedule_key'] = schedule_key
+
+    if not jobs:
+        env['workers_jobs.results'] = {}
+        return env
+
     return transfer_job(
         env,
-        "oioioi.sioworkers.handlers.transfer_job",
-        "oioioi.sioworkers.handlers.restore_job",
+        'oioioi.sioworkers.handlers.transfer_job',
+        'oioioi.sioworkers.handlers.restore_job',
     )
 
 
 @_skip_on_compilation_error
-def run_tests_end(env, **kwargs):
-    not_to_judge = env["workers_jobs.not_to_judge"]
-    del env["workers_jobs.not_to_judge"]
-    jobs = env["workers_jobs.results"]
-    env.setdefault("test_results", {})
+def run_tests_end(env, kind=None, **kwargs):
+    not_to_judge = env.pop('workers_jobs.not_to_judge', [])
+    jobs = env.get('workers_jobs.results', {})
+    env.setdefault('test_results', {})
     for test_name, result in jobs.items():
-        env["test_results"].setdefault(test_name, {}).update(result)
+        env['test_results'].setdefault(test_name, {}).update(result)
     for test_name in not_to_judge:
-        env["test_results"].setdefault(test_name, {}).update(env["tests"][test_name])
+        env['test_results'].setdefault(test_name, {}).update(env['tests'][test_name])
+
+    if _supports_skip_scheduler(env) and _finalize_scheduled_batch(env, kind):
+        _prepend_next_batch(env, kind)
+
     return env
 
 
@@ -336,9 +525,12 @@ def grade_tests(env, **kwargs):
     tests = env["tests"]
     for test_name, test_result in env["test_results"].items():
         if tests[test_name]["to_judge"]:
-            score, max_score, status = fun(tests[test_name], test_result)
-            assert isinstance(score, type(None) | ScoreValue)
-            assert isinstance(max_score, type(None) | ScoreValue)
+            if test_result.get('result_code') == SKIP_STATUS or test_result.get('status') == SKIP_STATUS:
+                score, max_score, status = None, None, SKIP_STATUS
+            else:
+                score, max_score, status = fun(tests[test_name], test_result)
+                assert isinstance(score, type(None) | ScoreValue)
+                assert isinstance(max_score, type(None) | ScoreValue)
             test_result["score"] = score and score.serialize()
             test_result["max_score"] = max_score and max_score.serialize()
             test_result["status"] = status

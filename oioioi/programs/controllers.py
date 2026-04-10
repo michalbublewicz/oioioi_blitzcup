@@ -41,6 +41,7 @@ from oioioi.programs.models import (
     OutputChecker,
     ProblemAllowedLanguage,
     ProblemCompiler,
+    ProgramsConfig,
     ProgramSubmission,
     Submission,
     TestReport,
@@ -146,9 +147,14 @@ class ProgrammingProblemController(ProblemController):
         environ["problem_instance_id"] = problem_instance.id
         environ["problem_id"] = problem.id
         environ["problem_short_name"] = problem.short_name
+        environ["subtask_parallel_limit"] = None
         if contest is not None:
             environ["round_id"] = round.id
             environ["contest_id"] = contest.id
+            try:
+                environ["subtask_parallel_limit"] = contest.programs_config.subtask_parallel_limit
+            except ProgramsConfig.DoesNotExist:
+                pass
         environ["submission_owner"] = submission.user.username if submission.user else None
         environ["oioioi_instance"] = settings.SITE_NAME
         environ["contest_priority"] = contest.judging_priority if contest is not None else settings.NON_CONTEST_PRIORITY
@@ -195,7 +201,7 @@ class ProgrammingProblemController(ProblemController):
                         "oioioi.programs.handlers.run_tests",
                         {"kind": "EXAMPLE"},
                     ),
-                    ("initial_run_tests_end", "oioioi.programs.handlers.run_tests_end"),
+                    ("initial_run_tests_end", "oioioi.programs.handlers.run_tests_end", {"kind": "EXAMPLE"}),
                     ("initial_grade_tests", "oioioi.programs.handlers.grade_tests"),
                     ("initial_grade_groups", "oioioi.programs.handlers.grade_groups"),
                     (
@@ -220,7 +226,7 @@ class ProgrammingProblemController(ProblemController):
                         "oioioi.programs.handlers.run_tests",
                         {"kind": None},
                     ),
-                    ("userout_run_tests", "oioioi.programs.handlers.run_tests_end"),
+                    ("userout_run_tests", "oioioi.programs.handlers.run_tests_end", {"kind": None}),
                     ("userout_grade_tests", "oioioi.programs.handlers.grade_tests"),
                     ("userout_grade_groups", "oioioi.programs.handlers.grade_groups"),
                     (
@@ -255,7 +261,7 @@ class ProgrammingProblemController(ProblemController):
                         "oioioi.programs.handlers.run_tests",
                         {"kind": "NORMAL"},
                     ),
-                    ("final_run_tests_end", "oioioi.programs.handlers.run_tests_end"),
+                    ("final_run_tests_end", "oioioi.programs.handlers.run_tests_end", {"kind": "NORMAL"}),
                     ("final_grade_tests", "oioioi.programs.handlers.grade_tests"),
                     ("final_grade_groups", "oioioi.programs.handlers.grade_groups"),
                     (
@@ -271,7 +277,7 @@ class ProgrammingProblemController(ProblemController):
             recipe_body.extend(
                 [
                     ("hidden_run_tests", "oioioi.programs.handlers.run_tests"),
-                    ("hidden_run_tests_end", "oioioi.programs.handlers.run_tests_end"),
+                    ("hidden_run_tests_end", "oioioi.programs.handlers.run_tests_end", {"kind": None}),
                     ("hidden_grade_tests", "oioioi.programs.handlers.grade_tests"),
                     ("hidden_grade_groups", "oioioi.programs.handlers.grade_groups"),
                     (
@@ -292,7 +298,7 @@ class ProgrammingProblemController(ProblemController):
             recipe_body.extend(
                 [
                     ("full_run_tests", "oioioi.programs.handlers.run_tests"),
-                    ("full_run_tests", "oioioi.programs.handlers.run_tests_end"),
+                    ("full_run_tests", "oioioi.programs.handlers.run_tests_end", {"kind": None}),
                     ("full_grade_tests", "oioioi.programs.handlers.grade_tests"),
                     ("full_grade_groups", "oioioi.programs.handlers.grade_groups"),
                     (

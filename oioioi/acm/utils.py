@@ -16,4 +16,6 @@ def acm_score_aggregator(group_results):
     if not group_results:
         return None, None, "OK"
     status = aggregate_statuses([result["status"] for result in group_results.values()])
+    if status == "SKIP":
+        return None, None, status
     return BinaryScore(status == "OK"), BinaryScore(True), status

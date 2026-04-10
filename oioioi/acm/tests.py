@@ -4,6 +4,9 @@ from datetime import UTC, datetime  # pylint: disable=E0611
 import bs4
 from django.urls import reverse
 
+from oioioi.acm.score import BinaryScore
+from oioioi.acm import utils as acm_utils
+
 from oioioi.base.tests import TestCase, fake_timezone_now
 from oioioi.contests.models import Contest
 
@@ -166,3 +169,14 @@ class TestACMScores(TestCase):
         self.assertIn("badge-danger", self._get_badge_for_problem(response.content, "A"))
         self.assertIn("badge-success", self._get_badge_for_problem(response.content, "sum"))
         self.assertIn("badge-success", self._get_badge_for_problem(response.content, "test"))
+
+
+class TestACMSkipAggregation(TestCase):
+    def test_skip_is_neutral_for_acm_score_aggregator(self):
+        score, max_score, status = acm_utils.acm_score_aggregator({'skip': {'status': 'SKIP'}, 'ok': {'status': 'OK'}})
+        self.assertEqual(status, 'OK')
+        self.assertEqual(score, BinaryScore(True))
+        self.assertEqual(max_score, BinaryScore(True))
+
+    def test_all_skipped_groups_stay_skipped(self):
+        self.assertEqual((None, None, 'SKIP'), acm_utils.acm_score_aggregator({'skip': {'status': 'SKIP'}}))

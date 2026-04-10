@@ -368,13 +368,17 @@ def get_results_visibility(request):
 
 
 def aggregate_statuses(statuses):
-    """Returns first unsuccessful status or 'OK' if all are successful"""
+    """Returns the decisive status while treating SKIP as neutral when possible."""
 
-    failures = [s for s in statuses if s != "OK"]
+    statuses = [s for s in statuses if s is not None]
+    failures = [s for s in statuses if s not in ('OK', 'SKIP')]
     if failures:
         return failures[0]
-    else:
-        return "OK"
+    if any(s == 'OK' for s in statuses):
+        return 'OK'
+    if statuses and all(s == 'SKIP' for s in statuses):
+        return 'SKIP'
+    return 'OK'
 
 
 def used_controllers():
@@ -684,8 +688,25 @@ def get_inline_for_contest(inline, contest):
 # may include refactoring the models of `Contest`, `ProgramsConfig` and `TermsAcceptedPhrase`
 
 
-def extract_programs_config_execution_mode(request):
-    return request.POST.get("programs_config-0-execution_mode", None)
+def extract_programs_config_post_data(request):
+    execution_mode = request.POST.get("programs_config-0-execution_mode", "AUTO") or "AUTO"
+    raw_subtask_parallel_limit = request.POST.get("programs_config-0-subtask_parallel_limit", None)
+
+    if raw_subtask_parallel_limit in (None, ""):
+        subtask_parallel_limit = None
+    else:
+        try:
+            subtask_parallel_limit = int(raw_subtask_parallel_limit)
+        except (TypeError, ValueError):
+            subtask_parallel_limit = None
+        else:
+            if subtask_parallel_limit <= 0:
+                subtask_parallel_limit = None
+
+    return {
+        "execution_mode": execution_mode,
+        "subtask_parallel_limit": subtask_parallel_limit,
+    }
 
 
 def create_programs_config(request, adding):
@@ -696,13 +717,15 @@ def create_programs_config(request, adding):
         adding (bool): If True, the contest is being added; otherwise, it is being modified.
     """
     requested_contest_id = request.POST.get("id", None)
-    execution_mode = extract_programs_config_execution_mode(request)
+    programs_config_data = extract_programs_config_post_data(request)
+    execution_mode = programs_config_data["execution_mode"]
+    subtask_parallel_limit = programs_config_data["subtask_parallel_limit"]
 
-    if execution_mode and execution_mode != "AUTO":
+    if execution_mode != "AUTO" or subtask_parallel_limit is not None:
         if adding and requested_contest_id:
-            ProgramsConfig.objects.create(contest_id=requested_contest_id, execution_mode=execution_mode)
+            ProgramsConfig.objects.create(contest_id=requested_contest_id, **programs_config_data)
         elif not hasattr(request.contest, "programs_config"):
-            ProgramsConfig.objects.create(contest_id=request.contest.id, execution_mode=execution_mode)
+            ProgramsConfig.objects.create(contest_id=request.contest.id, **programs_config_data)
 
 
 def extract_terms_accepted_phrase_text(request):

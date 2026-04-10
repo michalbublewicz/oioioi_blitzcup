@@ -1485,7 +1485,6 @@ class TestContestAdmin(TestCase):
     def test_programs_config_creation(self):
         self.assertTrue(self.client.login(username="test_admin"))
 
-        # Test programs config after adding contest
         url = reverse("oioioiadmin:contests_contest_add")
 
         contest_id = "cid"
@@ -1506,6 +1505,7 @@ class TestContestAdmin(TestCase):
                 "judging_priority": "10",
                 "judging_weight": "1",
                 "programs_config-0-execution_mode": "sio2jail",
+                "programs_config-0-subtask_parallel_limit": "1",
                 "_save": "Save",
             }
         )
@@ -1518,8 +1518,8 @@ class TestContestAdmin(TestCase):
         programs_config = ProgramsConfig.objects.get()
         self.assertEqual(programs_config.contest, contest)
         self.assertEqual(programs_config.execution_mode, "sio2jail")
+        self.assertEqual(programs_config.subtask_parallel_limit, 1)
 
-        # Test programs config after changing contest
         url = reverse("oioioiadmin:contests_contest_change", kwargs={"contest_id": contest_id, "object_id": contest_id})
 
         post_data.update(
@@ -1528,6 +1528,7 @@ class TestContestAdmin(TestCase):
                 "programs_config-0-id": programs_config.id,
                 "programs_config-0-contest": contest_id,
                 "programs_config-0-execution_mode": "cpu",
+                "programs_config-0-subtask_parallel_limit": "2",
             }
         )
 
@@ -1540,6 +1541,72 @@ class TestContestAdmin(TestCase):
         programs_config = ProgramsConfig.objects.get()
         self.assertEqual(programs_config.contest, contest)
         self.assertEqual(programs_config.execution_mode, "cpu")
+        self.assertEqual(programs_config.subtask_parallel_limit, 2)
+
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        soup = bs4.BeautifulSoup(response.content, "html.parser")
+        field = soup.find("input", {"name": "programs_config-0-subtask_parallel_limit"})
+        self.assertIsNotNone(field)
+        self.assertEqual(field.get("value"), "2")
+
+    def test_programs_config_created_when_only_parallel_limit_is_set(self):
+        self.assertTrue(self.client.login(username="test_admin"))
+
+        add_url = reverse("oioioiadmin:contests_contest_add")
+        contest_id = "cid_parallel_only"
+        post_data = make_empty_contest_formset()
+        post_data.update(
+            {
+                "name": "parallel only",
+                "id": contest_id,
+                "start_date_0": "2012-02-03",
+                "start_date_1": "04:05:06",
+                "end_date_0": "2012-02-04",
+                "end_date_1": "05:06:07",
+                "results_date_0": "2012-02-05",
+                "results_date_1": "06:07:08",
+                "controller_name": "oioioi.programs.controllers.ProgrammingContestController",
+                "is_archived": "False",
+                "judging_priority": "10",
+                "judging_weight": "1",
+                "programs_config-0-execution_mode": "AUTO",
+                "programs_config-0-subtask_parallel_limit": "",
+                "_save": "Save",
+            }
+        )
+
+        response = self.client.post(add_url, post_data, follow=True)
+        self.assertEqual(response.status_code, 200)
+        contest = Contest.objects.get(id=contest_id)
+        self.assertFalse(hasattr(contest, "programs_config"))
+        self.assertEqual(ProgramsConfig.objects.count(), 0)
+
+        change_url = reverse("oioioiadmin:contests_contest_change", kwargs={"contest_id": contest_id, "object_id": contest_id})
+        post_data.update(
+            {
+                "name": "parallel only updated",
+                "programs_config-0-execution_mode": "AUTO",
+                "programs_config-0-subtask_parallel_limit": "1",
+            }
+        )
+
+        response = self.client.post(change_url, post_data, follow=True)
+        self.assertEqual(response.status_code, 200)
+        contest.refresh_from_db()
+        self.assertEqual(contest.name, "parallel only updated")
+        self.assertEqual(ProgramsConfig.objects.count(), 1)
+        programs_config = ProgramsConfig.objects.get()
+        self.assertEqual(programs_config.contest, contest)
+        self.assertEqual(programs_config.execution_mode, "AUTO")
+        self.assertEqual(programs_config.subtask_parallel_limit, 1)
+
+        response = self.client.get(change_url)
+        self.assertEqual(response.status_code, 200)
+        soup = bs4.BeautifulSoup(response.content, "html.parser")
+        field = soup.find("input", {"name": "programs_config-0-subtask_parallel_limit"})
+        self.assertIsNotNone(field)
+        self.assertEqual(field.get("value"), "1")
 
     def test_terms_accepted_phrase_creation(self):
         self.assertTrue(self.client.login(username="test_admin"))

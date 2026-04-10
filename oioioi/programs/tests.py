@@ -2,6 +2,7 @@ import os
 import re
 import urllib
 from collections import defaultdict
+from unittest.mock import patch
 from datetime import UTC, datetime, timedelta  # pylint: disable=E0611
 
 import pytest
@@ -28,8 +29,9 @@ from oioioi.base.tests import (
 )
 from oioioi.base.utils import memoized_property
 from oioioi.base.utils.test_migrations import TestCaseMigrations
+from oioioi.contests.controllers import get_badge_class
 from oioioi.contests.handlers import send_notification_judged
-from oioioi.contests.models import Contest, ProblemInstance, Round, Submission
+from oioioi.contests.models import Contest, ProblemInstance, Round, ScoreReport, Submission, SubmissionReport
 from oioioi.contests.scores import IntegerScore
 from oioioi.contests.tests import PrivateRegistrationController, SubmitMixin
 from oioioi.evalmgr.tasks import create_environ
@@ -37,14 +39,25 @@ from oioioi.filetracker.tests import TestStreamingMixin
 from oioioi.problems.models import Problem
 from oioioi.programs import utils
 from oioioi.programs.controllers import ProgrammingContestController
-from oioioi.programs.handlers import collect_tests
+from oioioi.programs.handlers import (
+    _historical_test_bonus,
+    _historical_test_stats,
+    _order_group_tests,
+    collect_tests,
+    grade_tests,
+    run_tests,
+    run_tests_end,
+)
 from oioioi.programs.models import (
     CheckerFormatForContest,
     CheckerFormatForProblem,
+    CompilationReport,
+    GroupReport,
     LanguageOverrideForTest,
     ModelSolution,
     ProblemAllowedLanguage,
     ProgramSubmission,
+    ProgramsConfig,
     ReportActionsConfig,
     Test,
     TestReport,
@@ -1942,3 +1955,381 @@ class TestOICompare(TestCase):
                 CheckerFormatForContest.objects.create(contest=contest, format=format_contest)
 
             self.assertEqual(get_checker_format(pi), expected)
+
+
+class TestSkipAggregationAndRendering(TestCase):
+    fixtures = [
+        'test_users',
+        'test_contest',
+        'test_full_package',
+        'test_problem_instance',
+    ]
+
+    def setUp(self):
+        self.problem_instance = ProblemInstance.objects.get(pk=1)
+        self.user = User.objects.get(username='test_user')
+
+    def _make_submission(self, status='WA'):
+        submission = ProgramSubmission.objects.create(
+            problem_instance=self.problem_instance,
+            user=self.user,
+            date=django_timezone.now(),
+            kind='NORMAL',
+            source_file=ContentFile(b'int main(void) { return 0; }', name=f'{status.lower()}.c'),
+        )
+        submission.status = status
+        submission.save(update_fields=['status'])
+        return submission
+
+    def test_aggregate_statuses_with_skip(self):
+        from oioioi.contests.utils import aggregate_statuses
+
+        self.assertEqual(aggregate_statuses(['SKIP', 'OK']), 'OK')
+        self.assertEqual(aggregate_statuses(['SKIP', 'WA', 'OK']), 'WA')
+        self.assertEqual(aggregate_statuses(['SKIP', 'SKIP']), 'SKIP')
+
+    def test_skip_neutral_group_scorers(self):
+        ok = {
+            'score': IntegerScore(50).serialize(),
+            'max_score': IntegerScore(100).serialize(),
+            'status': 'OK',
+            'order': 0,
+        }
+        skip = {'score': None, 'max_score': None, 'status': 'SKIP', 'order': 1}
+        wa = {
+            'score': IntegerScore(0).serialize(),
+            'max_score': IntegerScore(100).serialize(),
+            'status': 'WA',
+            'order': 2,
+        }
+
+        self.assertEqual((50, 100, 'OK'), utils.min_group_scorer({'ok': ok, 'skip': skip}))
+        self.assertEqual((50, 100, 'OK'), utils.sum_group_scorer({'ok': ok, 'skip': skip}))
+        self.assertEqual((50, 100, 'OK'), utils.sum_score_aggregator({'ok': ok, 'skip': skip}))
+        self.assertEqual((0, 100, 'WA'), utils.min_group_scorer({'skip': skip, 'wa': wa}))
+        self.assertEqual((None, None, 'SKIP'), utils.min_group_scorer({'skip': skip}))
+        self.assertEqual((None, None, 'SKIP'), utils.sum_group_scorer({'skip': skip}))
+
+    def test_skip_status_display_and_rendering(self):
+        submission = self._make_submission(status='SKIP')
+        report = SubmissionReport.objects.create(submission=submission, status='ACTIVE', kind='NORMAL')
+        ScoreReport.objects.create(submission_report=report, status='SKIP', score=None, max_score=None)
+        CompilationReport.objects.create(submission_report=report, status='OK', compiler_output='')
+        GroupReport.objects.create(submission_report=report, group='g0', status='SKIP', score=None, max_score=None)
+        test_report = TestReport.objects.create(
+            submission_report=report,
+            status='SKIP',
+            test_name='skip-test',
+            test_group='g0',
+            score=None,
+            max_score=None,
+            time_used=0,
+            test_time_limit=100,
+        )
+
+        self.assertEqual(test_report.get_status_display(), 'Skipped')
+        self.assertEqual(get_badge_class('SKIP'), 'badge-secondary')
+
+        self.assertTrue(self.client.login(username='test_user'))
+        response = self.client.get(
+            reverse('submission', kwargs={'contest_id': self.problem_instance.contest.id, 'submission_id': submission.id}),
+            follow=True,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'submission--SKIP')
+
+
+class TestSkipScheduler(TestCase):
+    fixtures = [
+        'test_users',
+        'test_contest',
+        'test_full_package',
+        'test_problem_instance',
+        'test_submission',
+    ]
+
+    def setUp(self):
+        self.problem_instance = ProblemInstance.objects.get(pk=1)
+        self.user = User.objects.get(username='test_user')
+
+    def _make_submission(self, status='WA'):
+        submission = ProgramSubmission.objects.create(
+            problem_instance=self.problem_instance,
+            user=self.user,
+            date=django_timezone.now(),
+            kind='NORMAL',
+            source_file=ContentFile(b'int main(void) { return 0; }', name=f'scheduler-{status.lower()}.c'),
+        )
+        submission.status = status
+        submission.save(update_fields=['status'])
+        return submission
+
+    def _make_test_env(self, name, group, order, to_judge=True):
+        return {
+            'name': name,
+            'group': group,
+            'kind': 'NORMAL',
+            'order': order,
+            'to_judge': to_judge,
+            'max_score': 100,
+            'exec_time_limit': 100,
+        }
+
+    def _make_env(self, limit, tests, submission=None):
+        submission = submission or ProgramSubmission.objects.get(pk=1)
+        env = create_environ()
+        env.update(
+            {
+                'tests': tests,
+                'compiled_file': 'compiled',
+                'exec_info': {},
+                'submission_kind': 'NORMAL',
+                'untrusted_checker': False,
+                'problem_instance_id': self.problem_instance.id,
+                'submission_id': submission.id,
+                'group_scorer': 'oioioi.programs.utils.min_group_scorer',
+                'subtask_parallel_limit': limit,
+                'recipe': [('after', 'oioioi.evalmgr.tasks._placeholder')],
+            }
+        )
+        return env
+
+    def _dispatch_batch(self, env):
+        with patch('oioioi.programs.handlers.transfer_job', side_effect=lambda current_env, *args, **kwargs: current_env):
+            return run_tests(env, kind='NORMAL')
+
+    def _create_history_report(self, test_name, status, time_used):
+        submission = self._make_submission(status=status)
+        report = SubmissionReport.objects.create(submission=submission, status='ACTIVE', kind='NORMAL')
+        TestReport.objects.create(
+            submission_report=report,
+            status=status,
+            test_name=test_name,
+            test_group='g-history',
+            score=None,
+            max_score=None,
+            time_used=time_used,
+            test_time_limit=100,
+        )
+
+    def test_scheduler_skips_undispatched_tail_when_limit_one(self):
+        env = self._make_env(
+            1,
+            {
+                'g1a': self._make_test_env('g1a', 'g1', 0),
+                'g1b': self._make_test_env('g1b', 'g1', 1),
+                'g1c': self._make_test_env('g1c', 'g1', 2),
+                'g2a': self._make_test_env('g2a', 'g2', 0),
+            },
+        )
+
+        env = self._dispatch_batch(env)
+        self.assertEqual(set(env['workers_jobs'].keys()), {'g1a', 'g2a'})
+
+        env['workers_jobs.results'] = {
+            'g1a': {'result_code': 'WA', 'time_used': 5, 'exec_time_limit': 100},
+            'g2a': {'result_code': 'OK', 'time_used': 5, 'exec_time_limit': 100},
+        }
+        env = run_tests_end(env, kind='NORMAL')
+
+        self.assertEqual(env['test_results']['g1b']['status'], 'SKIP')
+        self.assertEqual(env['test_results']['g1c']['status'], 'SKIP')
+        self.assertNotIn('g2b', env['test_results'])
+        self.assertEqual(env['recipe'], [('after', 'oioioi.evalmgr.tasks._placeholder')])
+
+    def test_scheduler_skips_only_undispatched_tail_when_limit_two(self):
+        env = self._make_env(
+            2,
+            {
+                'g1a': self._make_test_env('g1a', 'g1', 0),
+                'g1b': self._make_test_env('g1b', 'g1', 1),
+                'g1c': self._make_test_env('g1c', 'g1', 2),
+            },
+        )
+
+        env = self._dispatch_batch(env)
+        self.assertEqual(set(env['workers_jobs'].keys()), {'g1a', 'g1b'})
+
+        env['workers_jobs.results'] = {
+            'g1a': {'result_code': 'WA', 'time_used': 5, 'exec_time_limit': 100},
+            'g1b': {'result_code': 'OK', 'time_used': 5, 'exec_time_limit': 100},
+        }
+        env = run_tests_end(env, kind='NORMAL')
+
+        self.assertEqual(env['test_results']['g1c']['status'], 'SKIP')
+        self.assertNotIn('status', env['test_results']['g1a'])
+
+    def test_unlimited_parallelism_keeps_full_fanout(self):
+        env = self._make_env(
+            None,
+            {
+                'g1a': self._make_test_env('g1a', 'g1', 0),
+                'g1b': self._make_test_env('g1b', 'g1', 1),
+                'g2a': self._make_test_env('g2a', 'g2', 0),
+            },
+        )
+
+        env = self._dispatch_batch(env)
+        self.assertEqual(set(env['workers_jobs'].keys()), {'g1a', 'g1b', 'g2a'})
+
+    def test_scheduler_requeues_next_batch_after_success(self):
+        env = self._make_env(
+            1,
+            {
+                'g1a': self._make_test_env('g1a', 'g1', 0),
+                'g1b': self._make_test_env('g1b', 'g1', 1),
+            },
+        )
+
+        env = self._dispatch_batch(env)
+        env['workers_jobs.results'] = {'g1a': {'result_code': 'OK', 'time_used': 5, 'exec_time_limit': 100}}
+        env = run_tests_end(env, kind='NORMAL')
+
+        self.assertEqual(env['recipe'][0][1], 'oioioi.programs.handlers.run_tests')
+        self.assertEqual(env['recipe'][1][1], 'oioioi.programs.handlers.run_tests_end')
+
+    def test_partial_rejudge_loads_untouched_reports_and_skip_results(self):
+        submission = self._make_submission(status='WA')
+        report = SubmissionReport.objects.create(submission=submission, status='ACTIVE', kind='NORMAL')
+        TestReport.objects.create(
+            submission_report=report,
+            status='OK',
+            test_name='held',
+            test_group='held-group',
+            score=IntegerScore(100),
+            max_score=IntegerScore(100),
+            time_used=7,
+            test_time_limit=100,
+        )
+
+        env = self._make_env(
+            1,
+            {
+                'held': self._make_test_env('held', 'held-group', 0, to_judge=False),
+                'g1a': self._make_test_env('g1a', 'g1', 0),
+                'g1b': self._make_test_env('g1b', 'g1', 1),
+            },
+            submission=submission,
+        )
+
+        env = self._dispatch_batch(env)
+        env['workers_jobs.results'] = {'g1a': {'result_code': 'WA', 'time_used': 5, 'exec_time_limit': 100}}
+        env = run_tests_end(env, kind='NORMAL')
+        env = grade_tests(env)
+
+        self.assertEqual(env['test_results']['held']['status'], 'OK')
+        self.assertEqual(env['test_results']['held']['time_used'], 7)
+        self.assertEqual(env['test_results']['g1b']['status'], 'SKIP')
+
+    def test_controller_populates_parallel_limit_for_skip_scheduler(self):
+        ProgramsConfig.objects.update_or_create(
+            contest=self.problem_instance.contest,
+            defaults={'execution_mode': 'AUTO', 'subtask_parallel_limit': 1},
+        )
+        submission = self._make_submission(status='WA')
+        env = create_environ()
+        env.update({'extra_args': {}, 'is_rejudge': False, 'job_id': 'job-controller'})
+
+        self.problem_instance.controller.generate_initial_evaluation_environ(env, submission)
+
+        self.assertEqual(env['subtask_parallel_limit'], 1)
+
+        env.update(
+            {
+                'tests': {
+                    'g1a': self._make_test_env('g1a', 'g1', 0),
+                    'g1b': self._make_test_env('g1b', 'g1', 1),
+                },
+                'compiled_file': 'compiled',
+                'exec_info': {},
+                'untrusted_checker': False,
+                'group_scorer': 'oioioi.programs.utils.min_group_scorer',
+                'recipe': [('after', 'oioioi.evalmgr.tasks._placeholder')],
+            }
+        )
+
+        env = self._dispatch_batch(env)
+        self.assertEqual(set(env['workers_jobs'].keys()), {'g1a'})
+
+        env['workers_jobs.results'] = {'g1a': {'result_code': 'WA', 'time_used': 5, 'exec_time_limit': 100}}
+        env = run_tests_end(env, kind='NORMAL')
+
+        self.assertEqual(env['test_results']['g1b']['status'], 'SKIP')
+
+    def test_historical_order_prefers_fast_failures(self):
+        self._create_history_report('slow-ok', 'OK', 1000)
+        self._create_history_report('fast-fail', 'WA', 10)
+        env = create_environ()
+        env.update({'problem_instance_id': self.problem_instance.id, 'job_id': 'job-fast'})
+        stats = _historical_test_stats(env, ['slow-ok', 'fast-fail'])
+
+        ordered = _order_group_tests(
+            env,
+            'g-history',
+            [
+                {'name': 'slow-ok', 'order': 0},
+                {'name': 'fast-fail', 'order': 1},
+            ],
+            stats,
+        )
+
+        self.assertEqual(['fast-fail', 'slow-ok'], ordered)
+
+    def test_order_falls_back_without_history(self):
+        env = create_environ()
+        env.update({'problem_instance_id': self.problem_instance.id, 'job_id': 'job-fallback'})
+
+        ordered = _order_group_tests(
+            env,
+            'g-fallback',
+            [
+                {'name': 'first', 'order': 0},
+                {'name': 'second', 'order': 1},
+            ],
+            {},
+        )
+
+        self.assertEqual(['first', 'second'], ordered)
+
+    def test_less_run_tests_receive_higher_exploration_bonus(self):
+        self._create_history_report('less-run', 'OK', 100)
+        for _ in range(4):
+            self._create_history_report('more-run', 'OK', 100)
+
+        env = create_environ()
+        env.update({'problem_instance_id': self.problem_instance.id, 'job_id': 'job-bonus'})
+        stats = _historical_test_stats(env, ['less-run', 'more-run'])
+
+        ordered = _order_group_tests(
+            env,
+            'g-bonus',
+            [
+                {'name': 'more-run', 'order': 0},
+                {'name': 'less-run', 'order': 1},
+            ],
+            stats,
+        )
+
+        self.assertEqual(['less-run', 'more-run'], ordered)
+        self.assertGreater(_historical_test_bonus(stats['less-run']), _historical_test_bonus(stats['more-run']))
+
+    def test_exploration_bonus_does_not_flip_clear_winner(self):
+        self._create_history_report('clear-winner', 'WA', 10)
+        for _ in range(4):
+            self._create_history_report('slow-failure', 'WA', 1000)
+
+        env = create_environ()
+        env.update({'problem_instance_id': self.problem_instance.id, 'job_id': 'job-clear'})
+        stats = _historical_test_stats(env, ['clear-winner', 'slow-failure'])
+
+        ordered = _order_group_tests(
+            env,
+            'g-clear',
+            [
+                {'name': 'slow-failure', 'order': 0},
+                {'name': 'clear-winner', 'order': 1},
+            ],
+            stats,
+        )
+
+        self.assertEqual(['clear-winner', 'slow-failure'], ordered)
