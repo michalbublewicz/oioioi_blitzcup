@@ -1,0 +1,21 @@
+{% extends "base-with-menu.html" %}
+{% load i18n %}
+
+{% block title %}{% trans "Generate matches" %}{% endblock %}
+
+{% block main-content %}
+<h1>{% trans "Generate matches" %}</h1>
+
+<p>{% blocktrans with contest_name=source_contest.name %}Generate 1 vs 1 Blitz contests from the template contest {{ contest_name }}.{% endblocktrans %}</p>
+
+<p>{% trans "Required workbook columns: match_code, player1_username, player2_username." %}</p>
+
+<form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    <table class="table table-borderless">
+        {{ form.as_table }}
+    </table>
+    <button type="submit" class="btn btn-primary">{% trans "Generate matches" %}</button>
+</form>
+{% endblock %}

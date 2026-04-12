@@ -688,6 +688,22 @@ def get_inline_for_contest(inline, contest):
 # may include refactoring the models of `Contest`, `ProgramsConfig` and `TermsAcceptedPhrase`
 
 
+def _ensure_mutable_post(request):
+    if hasattr(request.POST, "_mutable") and not request.POST._mutable:
+        request.POST = request.POST.copy()
+    return request.POST
+
+
+def _set_single_inline_post_binding(request, prefix, object_id, contest_id):
+    post_data = _ensure_mutable_post(request)
+    post_data[f"{prefix}-TOTAL_FORMS"] = "1"
+    post_data[f"{prefix}-INITIAL_FORMS"] = "1"
+    post_data.setdefault(f"{prefix}-MIN_NUM_FORMS", "0")
+    post_data.setdefault(f"{prefix}-MAX_NUM_FORMS", "1")
+    post_data[f"{prefix}-0-id"] = str(object_id)
+    post_data[f"{prefix}-0-contest"] = str(contest_id)
+
+
 def extract_programs_config_post_data(request):
     execution_mode = request.POST.get("programs_config-0-execution_mode", "AUTO") or "AUTO"
     raw_subtask_parallel_limit = request.POST.get("programs_config-0-subtask_parallel_limit", None)
@@ -724,8 +740,11 @@ def create_programs_config(request, adding):
     if execution_mode != "AUTO" or subtask_parallel_limit is not None:
         if adding and requested_contest_id:
             ProgramsConfig.objects.create(contest_id=requested_contest_id, **programs_config_data)
-        elif not hasattr(request.contest, "programs_config"):
-            ProgramsConfig.objects.create(contest_id=request.contest.id, **programs_config_data)
+        elif request.contest and request.contest.id:
+            programs_config = ProgramsConfig.objects.filter(contest_id=request.contest.id).first()
+            if programs_config is None:
+                programs_config = ProgramsConfig.objects.create(contest_id=request.contest.id, **programs_config_data)
+            _set_single_inline_post_binding(request, "programs_config", programs_config.pk, request.contest.id)
 
 
 def extract_terms_accepted_phrase_text(request):
@@ -746,8 +765,11 @@ def create_terms_accepted_phrase(request, adding):
     if text:
         if adding and requested_contest_id:
             TermsAcceptedPhrase.objects.create(contest_id=requested_contest_id, text=text)
-        elif not hasattr(request.contest, "terms_accepted_phrase"):
-            TermsAcceptedPhrase.objects.create(contest_id=request.contest.id, text=text)
+        elif request.contest and request.contest.id:
+            terms_accepted_phrase = TermsAcceptedPhrase.objects.filter(contest_id=request.contest.id).first()
+            if terms_accepted_phrase is None:
+                terms_accepted_phrase = TermsAcceptedPhrase.objects.create(contest_id=request.contest.id, text=text)
+            _set_single_inline_post_binding(request, "terms_accepted_phrase", terms_accepted_phrase.pk, request.contest.id)
 
 
 def create_contest_attributes(request, adding):

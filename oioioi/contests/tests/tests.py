@@ -2475,12 +2475,13 @@ class TestPermissionsBasicAdmin(TestCase):
 
         self.assertContains(response, "column-name_link")
         self.assertContains(response, "column-short_name_link")
+        self.assertContains(response, "column-order")
         self.assertContains(response, "column-round")
         self.assertContains(response, "column-actions_field")
         self.assertContains(response, "column-suspended_on_init_display")
         self.assertContains(response, "column-suspended_on_final_display")
 
-        self.assertContains(response, "column-", count=6)
+        self.assertContains(response, "column-", count=7)
 
         html = response.content.decode("utf-8")
         pos = html.find("field-actions_field")
@@ -2804,12 +2805,13 @@ class TestProblemsMenuWithQuizzes(TestCase):
 
         self.assertContains(response, "column-name_link")
         self.assertContains(response, "column-short_name_link")
+        self.assertContains(response, "column-order")
         self.assertContains(response, "column-round")
         self.assertContains(response, "column-actions_field")
         self.assertContains(response, "column-suspended_on_init_display")
         self.assertContains(response, "column-suspended_on_final_display")
 
-        self.assertContains(response, "column-", count=6)
+        self.assertContains(response, "column-", count=7)
 
         html = response.content.decode("utf-8")
         pos = html.find("field-actions_field")

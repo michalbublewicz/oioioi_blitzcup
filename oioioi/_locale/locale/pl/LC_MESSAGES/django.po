@@ -11106,3 +11106,105 @@ msgstr "Następne zadanie: %(problem)s."
 
 
 
+
+msgid "Generate matches"
+msgstr "Generuj mecze"
+
+msgid "Level label"
+msgstr "Etykieta etapu"
+
+msgid "Used in generated contest names, for example: Quarterfinals, Semifinals, Level 3."
+msgstr "Używane w nazwach wygenerowanych konkursów, na przykład: ćwierćfinały, półfinały, poziom 3."
+
+msgid "Contest ID prefix"
+msgstr "Prefiks ID konkursu"
+
+msgid "Used as the prefix for generated contest IDs."
+msgstr "Używany jako prefiks identyfikatorów wygenerowanych konkursów."
+
+msgid "Workbook"
+msgstr "Arkusz"
+
+msgid "Upload an .xlsx file with columns: match_code, player1_username, player2_username."
+msgstr "Wgraj plik .xlsx z kolumnami: match_code, player1_username, player2_username."
+
+msgid "The uploaded file must have the .xlsx extension."
+msgstr "Wgrany plik musi mieć rozszerzenie .xlsx."
+
+msgid "Generate 1 vs 1 Blitz contests from the template contest %(contest_name)s."
+msgstr "Wygeneruj konkursy Blitz 1 na 1 na podstawie konkursu szablonowego %(contest_name)s."
+
+msgid "Required workbook columns: match_code, player1_username, player2_username."
+msgstr "Wymagane kolumny arkusza: match_code, player1_username, player2_username."
+
+msgid "Example level labels: Quarterfinals, Semifinals, Level 2."
+msgstr "Przykładowe etykiety etapu: ćwierćfinały, półfinały, poziom 2."
+
+#, python-format
+msgid "Created %(count)d match contests."
+msgstr "Utworzono %(count)d konkursów meczowych."
+
+msgid "The workbook is empty."
+msgstr "Arkusz jest pusty."
+
+#, python-format
+msgid "Missing header or invalid columns: %(header)s. Expected: %(expected)s."
+msgstr "Brakuje nagłówka albo kolumny są niepoprawne: %(header)s. Oczekiwano: %(expected)s."
+
+msgid "The workbook could not be read."
+msgstr "Nie udało się odczytać arkusza."
+
+msgid "The workbook does not contain any matches."
+msgstr "Arkusz nie zawiera żadnych meczów."
+
+#, python-format
+msgid "Row %(row_number)d: match_code is required."
+msgstr "Wiersz %(row_number)d: pole match_code jest wymagane."
+
+#, python-format
+msgid "Row %(row_number)d: player1_username is required."
+msgstr "Wiersz %(row_number)d: pole player1_username jest wymagane."
+
+#, python-format
+msgid "Row %(row_number)d: player2_username is required."
+msgstr "Wiersz %(row_number)d: pole player2_username jest wymagane."
+
+#, python-format
+msgid "Row %(row_number)d: both players must be different."
+msgstr "Wiersz %(row_number)d: obaj zawodnicy muszą być różni."
+
+#, python-format
+msgid "Rows %(first_row)d and %(second_row)d: %(username)s is scheduled in more than one match."
+msgstr "Wiersze %(first_row)d i %(second_row)d: użytkownik %(username)s został przypisany do więcej niż jednego meczu."
+
+#, python-format
+msgid "Row %(row_number)d: %(match_code)s cannot be normalized to a valid match code."
+msgstr "Wiersz %(row_number)d: %(match_code)s nie może zostać znormalizowane do poprawnego kodu meczu."
+
+#, python-format
+msgid "Rows %(first_row)d and %(second_row)d: match codes collide after normalization (%(match_code)s)."
+msgstr "Wiersze %(first_row)d i %(second_row)d: kody meczów kolidują po normalizacji (%(match_code)s)."
+
+#, python-format
+msgid "Row %(row_number)d: generated contest ID %(contest_id)s is longer than %(max_length)d characters."
+msgstr "Wiersz %(row_number)d: wygenerowane ID konkursu %(contest_id)s jest dłuższe niż %(max_length)d znaków."
+
+#, python-format
+msgid "Rows %(first_row)d and %(second_row)d: generated contest ID %(contest_id)s is duplicated."
+msgstr "Wiersze %(first_row)d i %(second_row)d: wygenerowane ID konkursu %(contest_id)s powtarza się."
+
+#, python-format
+msgid "Row %(row_number)d: user %(username)s does not exist."
+msgstr "Wiersz %(row_number)d: użytkownik %(username)s nie istnieje."
+
+#, python-format
+msgid "Generated contest ID %(contest_id)s already exists."
+msgstr "Wygenerowane ID konkursu %(contest_id)s już istnieje."
+
+#, python-format
+msgid "%(source)s - %(level)s - %(match_code)s: %(player1)s vs %(player2)s"
+msgstr "%(source)s - %(level)s - %(match_code)s: %(player1)s vs %(player2)s"
+
+#, python-format
+msgid "Row %(row_number)d: generated contest name is longer than %(max_length)d characters."
+msgstr "Wiersz %(row_number)d: wygenerowana nazwa konkursu jest dłuższa niż %(max_length)d znaków."

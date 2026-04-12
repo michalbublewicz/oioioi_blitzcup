@@ -151,10 +151,9 @@ class ProgrammingProblemController(ProblemController):
         if contest is not None:
             environ["round_id"] = round.id
             environ["contest_id"] = contest.id
-            try:
-                environ["subtask_parallel_limit"] = contest.programs_config.subtask_parallel_limit
-            except ProgramsConfig.DoesNotExist:
-                pass
+            environ["subtask_parallel_limit"] = ProgramsConfig.objects.filter(contest_id=contest.id).values_list(
+                "subtask_parallel_limit", flat=True
+            ).first()
         environ["submission_owner"] = submission.user.username if submission.user else None
         environ["oioioi_instance"] = settings.SITE_NAME
         environ["contest_priority"] = contest.judging_priority if contest is not None else settings.NON_CONTEST_PRIORITY
@@ -846,6 +845,16 @@ class ProgrammingContestController(ContestController):
         problem.controller.fill_evaluation_environ(environ, submission)
         self.fill_evaluation_environ_post_problem(environ, submission)
 
+    def generate_initial_evaluation_environ(self, environ, submission, **kwargs):
+        submission.problem_instance.problem.controller.generate_initial_evaluation_environ(
+            environ, submission, **kwargs
+        )
+
+    def generate_base_environ(self, environ, submission, **kwargs):
+        submission.problem_instance.problem.controller.generate_base_environ(
+            environ, submission, **kwargs
+        )
+
     def fill_evaluation_environ_post_problem(self, environ, submission):
         """Run after ProblemController.fill_evaluation_environ."""
         if "INITIAL" in environ["report_kinds"]:
@@ -1027,10 +1036,13 @@ class ProgrammingContestController(ContestController):
 
         Return 'sio2jail' if you want to use SIO2Jail. Otherwise return 'cpu'.
         """
-        if hasattr(self.contest, "programs_config") and self.contest.programs_config.execution_mode != "AUTO":
-            return self.contest.programs_config.execution_mode
-        else:
+        if self.contest is None:
             return self.get_default_safe_exec_mode()
+
+        execution_mode = ProgramsConfig.objects.filter(contest_id=self.contest.id).values_list("execution_mode", flat=True).first()
+        if execution_mode and execution_mode != "AUTO":
+            return execution_mode
+        return self.get_default_safe_exec_mode()
 
     def get_default_safe_exec_mode(self):
         return settings.DEFAULT_SAFE_EXECUTION_MODE
