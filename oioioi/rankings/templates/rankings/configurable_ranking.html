@@ -1,0 +1,69 @@
+{% load i18n pagination_tags get_user_name %}
+
+{% if rows %}
+    <div class="float-left nav-content table-responsive-md">
+        {% autopaginate rows participants_on_page %}
+        {% paginate %}
+        <table class="table table-ranking table-striped table-sm submission">
+            <thead>
+                <tr>
+                    <th class="text-right">#</th>
+                    <th>{% trans "User" %}</th>
+                    {% if show_medal %}
+                        <th>{% trans "Medal" %}</th>
+                    {% endif %}
+                    {% if show_sum %}
+                        <th class="text-right">{% trans "Sum" %}</th>
+                    {% endif %}
+                    {% if show_percentage %}
+                        <th class="text-right">{% trans "Percentage" %}</th>
+                    {% endif %}
+                    {% if show_difference %}
+                        <th class="text-right">{% trans "Difference" %}</th>
+                    {% endif %}
+                    {% for config in round_configs %}
+                        <th class="text-right">{{ config.source_name }}</th>
+                    {% endfor %}
+                    {% for column in problem_columns %}
+                        <th class="text-right">{{ column.label }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    <tr id="ranking_row_{{ row.user.id }}">
+                        <td class="text-right">{{ row.place }}</td>
+                        <td class="user-cell">{% public_name row.user %}</td>
+                        {% if show_medal %}
+                            <td>
+                                {% if row.medal %}
+                                    <span class="badge badge-secondary">{{ row.medal_label }}</span>
+                                {% endif %}
+                            </td>
+                        {% endif %}
+                        {% if show_sum %}
+                            <td class="text-right sum-cell">{{ row.total_display }}</td>
+                        {% endif %}
+                        {% if show_percentage %}
+                            <td class="text-right">{{ row.percentage_display }}</td>
+                        {% endif %}
+                        {% if show_difference %}
+                            <td class="text-right">{{ row.difference_display }}</td>
+                        {% endif %}
+                        {% for score in row.round_score_displays %}
+                            <td class="text-right">{{ score }}</td>
+                        {% endfor %}
+                        {% for score in row.problem_score_displays %}
+                            <td class="text-right">{{ score }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% paginate %}
+    </div>
+{% else %}
+    <div class="empty-space-filler alert alert-info">
+        {% blocktrans %}Strange, there is no one in this ranking...{% endblocktrans %}
+    </div>
+{% endif %}

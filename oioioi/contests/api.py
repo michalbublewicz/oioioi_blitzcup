@@ -98,7 +98,9 @@ class GetContestProblems(views.APIView):
             if problem_stmt[1]:
                 serialized = dict(ProblemSerializer(problem_stmt[0], many=False).data)
                 serialized["full_name"] = problem_stmt[0].problem.legacy_name
-                serialized["user_result"] = UserResultForProblemSerializer(problem_stmt[3], many=False).data
+                serialized["user_result"] = (
+                    UserResultForProblemSerializer(problem_stmt[3], many=False).data if problem_stmt[3] is not None else None
+                )
                 serialized["submissions_left"] = problem_stmt[4]
                 serialized["can_submit"] = problem_stmt[6]
                 serialized["statement_extension"] = st.extension if (st := query_statement(problem_stmt[0].problem)) else None

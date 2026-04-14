@@ -23,6 +23,8 @@ class ScoresRevealContestControllerMixin:
         assert self.can_reveal(request, submission)[0]
 
         ScoreReveal.objects.get_or_create(submission=submission)
+        if submission.problem_instance.contest_id is not None:
+            submission.problem_instance.contest.controller.ranking_controller().invalidate_pi(submission.problem_instance)
 
     def get_revealed_submissions(self, user, problem_instance):
         return Submission.objects.filter(user=user, problem_instance=problem_instance, revealed__isnull=False)

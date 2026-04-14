@@ -38,7 +38,6 @@ from oioioi.contests.models import (
     ProblemInstance,
     Submission,
     SubmissionReport,
-    UserResultForProblem,
 )
 from oioioi.contests.processors import recent_contests
 from oioioi.contests.utils import (
@@ -51,6 +50,7 @@ from oioioi.contests.utils import (
     get_contest_dates,
     get_files_message,
     get_number_of_rounds,
+    get_problem_display_results_map,
     get_problems_sumbmission_limit,
     get_results_visibility,
     get_scoring_desription,
@@ -161,20 +161,9 @@ def problems_list_view(request):
     # 7) can_submit
     # Sorted by (start_date, end_date, round name, problem name)
     # Preload user-related data to avoid N+1 queries
-    results_map = {}
+    results_map = get_problem_display_results_map(request, controller, problem_instances)
     last_submission_map = {}
     if request.user.is_authenticated:
-        # Bulk fetch UserResultForProblem objects. We only keep those for which
-        # the user can see the submission score.
-        user_results_qs = UserResultForProblem.objects.filter(
-            user=request.user,
-            problem_instance__in=problem_instances,
-        ).select_related("submission_report__submission")
-        for r in user_results_qs:
-            # Some controllers may hide score even if UserResultForProblem exists
-            if r and r.submission_report and controller.can_see_submission_score(request, r.submission_report.submission):
-                results_map[r.problem_instance_id] = r
-
         # For each problem instance, fetch only the single latest NORMAL
         # submission by this user using a correlated subquery
         latest_sub_id_sq = (

@@ -1,9 +1,11 @@
 from datetime import datetime, timedelta  # pylint: disable=E0611
 
+from django.contrib import messages
 from django.core.exceptions import PermissionDenied
 from django.db.models import OuterRef, Q, Subquery
 from django.http import HttpRequest
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from django.utils.module_loading import import_string
 from django.utils.translation import gettext_lazy as _
 from pytz import UTC
@@ -16,10 +18,12 @@ from oioioi.contests.models import (
     Contest,
     FilesMessage,
     ProblemInstance,
+    ProblemScoreDisplayConfig,
     Round,
     RoundStartDelay,
     RoundTimeExtension,
     Submission,
+    SubmissionReport,
     SubmissionMessage,
     SubmissionsMessage,
     SubmitMessage,
@@ -751,6 +755,44 @@ def extract_terms_accepted_phrase_text(request):
     return request.POST.get("terms_accepted_phrase-0-text", None)
 
 
+def extract_problem_score_display_mode(request):
+    return request.POST.get("problemscoredisplayconfig-0-score_mode", None)
+
+
+def extract_configurable_ranking_settings_data(request):
+    raw_value = request.POST.get("configurablerankingsettings-0-show_default_rankings", None)
+    if raw_value is None:
+        return None
+    return {
+        "show_default_rankings": bool(raw_value),
+    }
+
+
+def _parse_split_datetime(request, prefix):
+    date_value = request.POST.get(f"{prefix}_0", "")
+    time_value = request.POST.get(f"{prefix}_1", "")
+    if not date_value or not time_value:
+        return None
+    parsed = datetime.strptime(f"{date_value} {time_value}", "%Y-%m-%d %H:%M:%S")
+    return timezone.make_aware(parsed, UTC)
+
+
+def _create_single_contest_inline(request, adding, prefix, model_class, defaults):
+    requested_contest_id = request.POST.get("id", None)
+    if adding and requested_contest_id:
+        instance = model_class.objects.create(contest_id=requested_contest_id, **defaults)
+        _set_single_inline_post_binding(request, prefix, instance.pk, requested_contest_id)
+    elif request.contest and request.contest.id:
+        instance = model_class.objects.filter(contest_id=request.contest.id).first()
+        if instance is None:
+            instance = model_class.objects.create(contest_id=request.contest.id, **defaults)
+        else:
+            for key, value in defaults.items():
+                setattr(instance, key, value)
+            instance.save(update_fields=list(defaults.keys()))
+        _set_single_inline_post_binding(request, prefix, instance.pk, request.contest.id)
+
+
 def create_terms_accepted_phrase(request, adding):
     """Creates TermsAcceptedPhrase for a given contest if needed.
 
@@ -772,6 +814,107 @@ def create_terms_accepted_phrase(request, adding):
             _set_single_inline_post_binding(request, "terms_accepted_phrase", terms_accepted_phrase.pk, request.contest.id)
 
 
+def create_problem_score_display_config(request, adding):
+    score_mode = extract_problem_score_display_mode(request)
+    if score_mode is None:
+        return
+    _create_single_contest_inline(
+        request,
+        adding,
+        "problemscoredisplayconfig",
+        ProblemScoreDisplayConfig,
+        {"score_mode": score_mode or "last"},
+    )
+
+
+def create_configurable_ranking_settings(request, adding):
+    settings_data = extract_configurable_ranking_settings_data(request)
+    if settings_data is None:
+        return
+    from oioioi.rankings.models import ConfigurableRankingSettings
+
+    _create_single_contest_inline(
+        request,
+        adding,
+        "configurablerankingsettings",
+        ConfigurableRankingSettings,
+        settings_data,
+    )
+
+
+def _warn_on_not_exclusive_rounds_from_post(request):
+    total_forms = int(request.POST.get("exclusivenessconfig_set-TOTAL_FORMS", "0") or "0")
+    if total_forms <= 0:
+        return
+
+    from oioioi.contestexcl.models import ExclusivenessConfig
+
+    ex_confs = []
+    for index in range(total_forms):
+        if request.POST.get(f"exclusivenessconfig_set-{index}-DELETE"):
+            continue
+        start_date = _parse_split_datetime(request, f"exclusivenessconfig_set-{index}-start_date")
+        if start_date is None:
+            continue
+        end_date = _parse_split_datetime(request, f"exclusivenessconfig_set-{index}-end_date")
+        enabled = bool(request.POST.get(f"exclusivenessconfig_set-{index}-enabled"))
+        if not enabled:
+            continue
+        ex_conf = ExclusivenessConfig(
+            contest=request.contest,
+            start_date=start_date,
+            end_date=end_date,
+            enabled=enabled,
+        )
+        ex_confs.append(ex_conf)
+
+    if not ex_confs or not request.contest:
+        return
+
+    round_start = _parse_split_datetime(request, "round_set-0-start_date")
+    round_end = _parse_split_datetime(request, "round_set-0-end_date")
+    round_name = request.POST.get("round_set-0-name", "")
+    if round_start is None:
+        return
+
+    ex_confs.sort(key=lambda ex_conf: ex_conf.start_date)
+    round_not_excl_dates = []
+    round_excl_end_date = round_start
+    for ex_conf in ex_confs:
+        if ex_conf.start_date > round_excl_end_date:
+            round_not_excl_dates.append((round_excl_end_date, ex_conf.start_date))
+            round_excl_end_date = ex_conf.start_date
+        if ex_conf.end_date:
+            round_excl_end_date = max(round_excl_end_date, ex_conf.end_date)
+        else:
+            break
+        if round_end and round_excl_end_date >= round_end:
+            break
+    else:
+        round_not_excl_dates.append((round_excl_end_date, round_end))
+
+    if not round_not_excl_dates:
+        return
+
+    first_future_date = round_not_excl_dates[0]
+    for date in round_not_excl_dates:
+        if not date[1] or date[1] >= timezone.now():
+            first_future_date = date
+            break
+
+    if not first_future_date[1]:
+        msg = _(
+            'Exclusiveness configs usually cover entire rounds, but currently round "%s" is not exclusive from %s! '
+            "Please verify that your exclusiveness configs are correct."
+        ) % (round_name, first_future_date[0])
+    else:
+        msg = _(
+            'Exclusiveness configs usually cover entire rounds, but currently round "%s" is not exclusive from %s to %s! '
+            "Please verify that your exclusiveness configs are correct."
+        ) % (round_name, first_future_date[0], first_future_date[1])
+    messages.warning(request, msg)
+
+
 def create_contest_attributes(request, adding):
     """Called to create certain attributes of contest object after modifying it that would not be created automatically.
     Creates attributes are ProgramsConfig and TermsAcceptedPhrase
@@ -784,9 +927,15 @@ def create_contest_attributes(request, adding):
         return
     create_programs_config(request, adding)
     create_terms_accepted_phrase(request, adding)
+    create_problem_score_display_config(request, adding)
+    create_configurable_ranking_settings(request, adding)
+    _warn_on_not_exclusive_rounds_from_post(request)
 
 
 def get_problem_statements(request, controller, problem_instances):
+    problem_instances = list(problem_instances)
+    results_map = get_problem_display_results_map(request, controller, problem_instances)
+
     # Problem statements in order
     # 1) problem instance
     # 2) statement_visible
@@ -802,18 +951,7 @@ def get_problem_statements(request, controller, problem_instances):
                 pi,
                 controller.can_see_statement(request, pi),
                 controller.get_round_times(request, pi.round),
-                # Because this view can be accessed by an anynomous user we can't
-                # use `user=request.user` (it would cause TypeError). Surprisingly
-                # using request.user.id is ok since for AnynomousUser id is set
-                # to None.
-                next(
-                    (
-                        r
-                        for r in UserResultForProblem.objects.filter(user__id=request.user.id, problem_instance=pi)
-                        if r and r.submission_report and controller.can_see_submission_score(request, r.submission_report.submission)
-                    ),
-                    None,
-                ),
+                results_map.get(pi.id),
                 pi.controller.get_submissions_left(request, pi),
                 pi.controller.get_submissions_limit(request, pi),
                 controller.can_submit(request, pi) and not is_contest_archived(request),
@@ -822,6 +960,121 @@ def get_problem_statements(request, controller, problem_instances):
         ],
         key=lambda p: (p[2].get_key_for_comparison(), p[0].round.name, getattr(p[0], 'order', 0), p[0].short_name),
     )
+
+
+def get_problem_display_results_map(request, controller, problem_instances):
+    if request.user.is_anonymous:
+        return {}
+
+    problem_instances = list(problem_instances)
+    if not problem_instances:
+        return {}
+
+    contest_supports_custom_problem_scores = {
+        contest.id: contest.controller.supports_configurable_round_rankings()
+        for contest in Contest.objects.filter(id__in={problem_instance.contest_id for problem_instance in problem_instances})
+    }
+    contest_score_modes = {
+        contest_id: "last"
+        for contest_id in {problem_instance.contest_id for problem_instance in problem_instances}
+    }
+    contest_score_modes.update(
+        ProblemScoreDisplayConfig.objects.filter(contest_id__in=contest_score_modes)
+        .values_list("contest_id", "score_mode")
+    )
+
+    results_map = {}
+    stored_problem_instances = [
+        problem_instance
+        for problem_instance in problem_instances
+        if not contest_supports_custom_problem_scores.get(problem_instance.contest_id, False)
+    ]
+    if stored_problem_instances:
+        stored_results = (
+            UserResultForProblem.objects.filter(problem_instance__in=stored_problem_instances, user=request.user)
+            .select_related("problem_instance", "submission_report", "submission_report__submission")
+            .prefetch_related("submission_report__scorereport_set")
+        )
+        for result in stored_results:
+            if result.score is None:
+                continue
+            if (
+                result.submission_report is None
+                or result.submission_report.submission is None
+                or not controller.can_see_submission_score(request, result.submission_report.submission)
+            ):
+                continue
+            results_map[result.problem_instance_id] = result
+
+    selectable_problem_instances = [
+        problem_instance
+        for problem_instance in problem_instances
+        if contest_supports_custom_problem_scores.get(problem_instance.contest_id, False)
+    ]
+    if not selectable_problem_instances:
+        return results_map
+
+    submissions = list(
+        Submission.objects.filter(
+            user=request.user,
+            problem_instance__in=selectable_problem_instances,
+            kind="NORMAL",
+            score__isnull=False,
+        )
+        .select_related(
+            "problem_instance",
+            "problem_instance__contest",
+            "problem_instance__problem",
+            "problem_instance__round",
+        )
+        .order_by("problem_instance_id", "date", "id")
+    )
+
+    submissions_by_problem = {}
+    for submission in submissions:
+        submissions_by_problem.setdefault(submission.problem_instance_id, []).append(submission)
+
+    active_reports = {
+        report.submission_id: report
+        for report in SubmissionReport.objects.filter(
+            submission__in=submissions,
+            status="ACTIVE",
+            kind="NORMAL",
+        )
+        .prefetch_related("scorereport_set")
+    }
+
+    for problem_instance in selectable_problem_instances:
+        visible_submissions = [
+            submission
+            for submission in submissions_by_problem.get(problem_instance.id, [])
+            if controller.can_see_submission_score(request, submission)
+        ]
+        if not visible_submissions:
+            continue
+
+        score_mode = contest_score_modes[problem_instance.contest_id]
+        chosen_submission = visible_submissions[-1]
+        if score_mode == "best":
+            chosen_submission = visible_submissions[0]
+            for submission in visible_submissions[1:]:
+                if submission.score > chosen_submission.score or (
+                    submission.score == chosen_submission.score
+                    and (submission.date, submission.id) > (chosen_submission.date, chosen_submission.id)
+                ):
+                    chosen_submission = submission
+        if chosen_submission.score is None:
+            continue
+
+        results_map[problem_instance.id] = UserResultForProblem(
+            user=request.user,
+            problem_instance=problem_instance,
+            score=chosen_submission.score,
+            status=chosen_submission.status,
+            submission_report=active_reports.get(chosen_submission.id),
+        )
+
+    return results_map
 
 
 def process_instances_to_limits(raw_instances):

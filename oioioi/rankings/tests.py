@@ -1,9 +1,11 @@
 import re
-from datetime import UTC, datetime  # pylint: disable=E0611
+from datetime import UTC, datetime, timedelta  # pylint: disable=E0611
 
 from django.conf import settings
 from django.contrib.auth.models import User
+from django.core.exceptions import ValidationError
 from django.http import QueryDict
+from django.test import RequestFactory
 from django.test.utils import override_settings
 from django.urls import reverse
 
@@ -15,12 +17,23 @@ from oioioi.base.tests import (
     fake_timezone_now,
 )
 from oioioi.base.tests.tests import TestPublicMessage
-from oioioi.contests.models import Contest, ProblemInstance, Round, UserResultForProblem
+from oioioi.contests.models import (
+    Contest,
+    ProblemInstance,
+    Round,
+    ScoreReport,
+    Submission,
+    SubmissionReport,
+    UserResultForProblem,
+)
 from oioioi.contests.scores import IntegerScore
 from oioioi.pa.score import PAScore
 from oioioi.programs.controllers import ProgrammingContestController
 from oioioi.rankings.controllers import DefaultRankingController
 from oioioi.rankings.models import (
+    ConfigurableRanking,
+    ConfigurableRankingRound,
+    ConfigurableRankingSettings,
     Ranking,
     RankingMessage,
     RankingPage,
@@ -28,6 +41,7 @@ from oioioi.rankings.models import (
     choose_for_recalculation,
     recalculate,
 )
+from oioioi.scoresreveal.models import ScoreReveal, ScoreRevealConfig
 
 VISIBLE_TASKS = ["zad1", "zad2"]
 HIDDEN_TASKS = ["zad3", "zad4"]
@@ -327,6 +341,523 @@ class TestRankingViews(TestCase):
             self.assertFalse(ranking3.is_up_to_date())
             recalc = choose_for_recalculation()
             self.assertIsNotNone(recalc)
+
+
+class TestConfigurableRankings(TestCase):
+    fixtures = [
+        "test_users",
+        "test_contest",
+        "test_full_package",
+        "test_problem_instance",
+        "test_submission",
+        "test_extra_rounds",
+        "test_permissions",
+    ]
+
+    def setUp(self):
+        super().setUp()
+        self.contest = Contest.objects.get()
+        self.controller = self.contest.controller.ranking_controller()
+        self.factory = RequestFactory()
+        self.round1 = Round.objects.get(pk=1)
+        self.round2 = Round.objects.get(pk=2)
+        self.round4 = Round.objects.get(pk=4)
+        self.pi1 = ProblemInstance.objects.get(pk=1)
+        self.pi4 = ProblemInstance.objects.get(pk=4)
+
+    def _request(self, username, timestamp):
+        request = self.factory.get("/")
+        request.user = User.objects.get(username=username)
+        request.contest = self.contest
+        request.timestamp = timestamp
+        return request
+
+    def _create_scored_submission(self, user, problem_instance, score, date):
+        submission = Submission.objects.create(
+            status="OK",
+            problem_instance=problem_instance,
+            kind="NORMAL",
+            comment="",
+            score=IntegerScore(score),
+            user=user,
+            date=date,
+        )
+        report = SubmissionReport.objects.create(
+            status="ACTIVE",
+            kind="NORMAL",
+            submission=submission,
+            creation_date=date,
+        )
+        ScoreReport.objects.create(
+            status="OK",
+            comment=None,
+            score=IntegerScore(score),
+            max_score=IntegerScore(100),
+            submission_report=report,
+        )
+        return submission
+
+    def _make_cached_ranking(self, key):
+        return Ranking.objects.get_or_create(
+            contest=self.contest,
+            key=key,
+            needs_recalculation=False,
+        )[0]
+
+    def test_configurable_ranking_admin_only_for_supported_contests(self):
+        ranking = ConfigurableRanking(contest=self.contest, name="Mixed finals")
+        ranking.full_clean()
+
+        other_contest = Contest.objects.create(
+            name="Other contest",
+            controller_name="oioioi.programs.controllers.ProgrammingContestController",
+        )
+        other_round = Round.objects.create(
+            contest=other_contest,
+            start_date=datetime(2012, 8, 1, tzinfo=UTC),
+            results_date=datetime(2012, 8, 2, tzinfo=UTC),
+        )
+        saved_ranking = ConfigurableRanking.objects.create(contest=self.contest, name="Saved ranking")
+        with self.assertRaises(ValidationError):
+            ConfigurableRankingRound(ranking=saved_ranking, round=other_round).full_clean()
+        with self.assertRaises(ValidationError):
+            ConfigurableRankingRound(ranking=saved_ranking, source_type="round").full_clean()
+        with self.assertRaises(ValidationError):
+            ConfigurableRankingRound(ranking=saved_ranking, source_type="sub_ranking", round=self.round1).full_clean()
+
+        self.assertTrue(self.client.login(username="test_contest_admin"))
+        self.client.get("/c/c/")
+        url = reverse("oioioiadmin:rankings_configurableranking_changelist")
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+
+        self.contest.controller_name = "oioioi.acm.controllers.ACMContestController"
+        self.contest.save()
+        with self.assertRaises(ValidationError):
+            ConfigurableRanking(contest=self.contest, name="Unsupported").full_clean()
+        check_not_accessible(self, url)
+
+    def test_configurable_ranking_tabs_and_hidden_columns(self):
+        user = User.objects.get(username="test_user")
+        self._create_scored_submission(
+            user,
+            self.pi1,
+            20,
+            datetime(2012, 6, 4, tzinfo=UTC),
+        )
+
+        ranking = ConfigurableRanking.objects.create(contest=self.contest, name="Visibility check")
+        visible_config = ConfigurableRankingRound.objects.create(
+            ranking=ranking,
+            round=self.round1,
+            order=1,
+            score_mode="last",
+            column_visibility="after_results",
+        )
+        hidden_config = ConfigurableRankingRound.objects.create(
+            ranking=ranking,
+            round=self.round2,
+            order=2,
+            score_mode="last",
+            column_visibility="after_start",
+        )
+
+        timestamp = datetime(2012, 8, 5, tzinfo=UTC)
+        regular_request = self._request("test_user", timestamp)
+        admin_request = self._request("test_admin", timestamp)
+
+        regular_choices = self.controller.available_rankings(regular_request)
+        self.assertIn((ranking.partial_key, "Visibility check"), regular_choices)
+
+        regular_key = self.controller.get_full_key(regular_request, ranking.partial_key)
+        self.assertEqual(regular_key, f"regular#{ranking.partial_key}|r{ranking.id}:{visible_config.id}")
+        regular_data = self.controller.get_serialized_ranking(regular_key)
+        self.assertEqual([config.id for config in regular_data["round_configs"]], [visible_config.id])
+        self.assertEqual(str(regular_data["rows"][0]["total"]), "20")
+
+        admin_key = self.controller.get_full_key(admin_request, ranking.partial_key)
+        self.assertEqual(admin_key, f"admin#{ranking.partial_key}")
+        admin_data = self.controller.get_serialized_ranking(admin_key)
+        self.assertEqual([config.id for config in admin_data["round_configs"]], [visible_config.id, hidden_config.id])
+        self.assertEqual(str(admin_data["rows"][0]["total"]), "54")
+
+        future_only = ConfigurableRanking.objects.create(contest=self.contest, name="Future only")
+        ConfigurableRankingRound.objects.create(
+            ranking=future_only,
+            round=self.round2,
+            order=1,
+            score_mode="last",
+            column_visibility="after_start",
+        )
+        regular_choices = self.controller.available_rankings(regular_request)
+        self.assertNotIn((future_only.partial_key, "Future only"), regular_choices)
+        admin_choices = self.controller.available_rankings(admin_request)
+        self.assertIn((future_only.partial_key, "Future only"), admin_choices)
+
+    def test_configurable_ranking_scoring_and_csv(self):
+        user1 = User.objects.get(username="test_user")
+        user2 = User.objects.get(username="test_user2")
+
+        self._create_scored_submission(
+            user1,
+            self.pi1,
+            20,
+            datetime(2012, 6, 4, tzinfo=UTC),
+        )
+        self._create_scored_submission(
+            user1,
+            self.pi1,
+            70,
+            datetime(2016, 1, 1, tzinfo=UTC),
+        )
+        self._create_scored_submission(
+            user2,
+            self.pi1,
+            25,
+            datetime(2012, 6, 4, tzinfo=UTC),
+        )
+        self._create_scored_submission(
+            user2,
+            self.pi1,
+            50,
+            datetime(2016, 1, 2, tzinfo=UTC),
+        )
+
+        ScoreRevealConfig.objects.create(problem_instance=self.pi4, reveal_limit=1)
+        revealed_user1 = self._create_scored_submission(
+            user1,
+            self.pi4,
+            40,
+            datetime(2012, 7, 31, 21, 5, tzinfo=UTC),
+        )
+        self._create_scored_submission(
+            user1,
+            self.pi4,
+            10,
+            datetime(2012, 7, 31, 21, 10, tzinfo=UTC),
+        )
+        revealed_user2 = self._create_scored_submission(
+            user2,
+            self.pi4,
+            12,
+            datetime(2012, 7, 31, 21, 4, tzinfo=UTC),
+        )
+        self._create_scored_submission(
+            user2,
+            self.pi4,
+            15,
+            datetime(2012, 7, 31, 21, 11, tzinfo=UTC),
+        )
+        ScoreReveal.objects.create(submission=revealed_user1)
+        ScoreReveal.objects.create(submission=revealed_user2)
+
+        ranking = ConfigurableRanking.objects.create(
+            contest=self.contest,
+            name="Finals mix",
+            medal_scheme="og",
+            show_sum=True,
+            show_percentage=True,
+            show_difference=True,
+        )
+        ConfigurableRankingRound.objects.create(
+            ranking=ranking,
+            round=self.round4,
+            order=1,
+            coefficient=1,
+            score_mode="last_revealed",
+            column_visibility="after_results",
+        )
+        ConfigurableRankingRound.objects.create(
+            ranking=ranking,
+            round=self.round1,
+            order=2,
+            coefficient=2,
+            score_mode="best",
+            column_visibility="after_results",
+            ignore_submissions_after=datetime(2015, 1, 1, tzinfo=UTC),
+        )
+
+        timestamp = datetime(2015, 8, 5, tzinfo=UTC)
+        admin_request = self._request("test_admin", timestamp)
+        key = self.controller.get_full_key(admin_request, ranking.partial_key)
+        data = self.controller.get_serialized_ranking(key)
+
+        self.assertEqual([config.round_id for config in data["round_configs"]], [self.round4.id, self.round1.id])
+        self.assertEqual([row["user"].username for row in data["rows"][:2]], ["test_user", "test_user2"])
+        self.assertEqual(str(data["rows"][0]["round_scores"][0]), "40")
+        self.assertEqual(str(data["rows"][0]["round_scores"][1]), "68")
+        self.assertEqual(data["problem_columns"][0]["label"], "Past round / zad4")
+        self.assertEqual(data["problem_columns"][1]["label"], "Round 1 / zad1")
+        self.assertEqual(data["rows"][0]["problem_score_displays"], ["40", "68"])
+        self.assertEqual(str(data["rows"][0]["total"]), "108")
+        self.assertEqual(data["rows"][0]["percentage_display"], "54%")
+        self.assertEqual(data["rows"][0]["difference_display"], "0")
+        self.assertEqual(data["rows"][0]["medal_label"], "Gold")
+        self.assertEqual(str(data["rows"][1]["round_scores"][0]), "15")
+        self.assertEqual(str(data["rows"][1]["round_scores"][1]), "50")
+        self.assertEqual(data["rows"][1]["problem_score_displays"], ["15", "50"])
+        self.assertEqual(str(data["rows"][1]["total"]), "65")
+        self.assertEqual(data["rows"][1]["percentage_display"], "32.5%")
+        self.assertEqual(data["rows"][1]["difference_display"], "43")
+        self.assertEqual(data["rows"][1]["medal_label"], "Silver")
+
+        self.assertTrue(self.client.login(username="test_admin"))
+        url = reverse("ranking_csv", kwargs={"contest_id": self.contest.id, "key": ranking.partial_key})
+        with fake_time(timestamp):
+            response = self.client.get(url)
+        content = response.content.decode("utf-8")
+        self.assertIn(
+            "No.,Login,First name,Last name,Medal,Sum,Percentage,Difference,Past round,Round 1,Past round / zad4,Round 1 / zad1",
+            content,
+        )
+        self.assertIn("1,test_user,Test,User,Gold,108,54%,0,40,68,40,68", content)
+        self.assertIn("2,test_user2,Test,User 2,Silver,65,32.5%,43,15,50,15,50", content)
+
+    def test_configurable_ranking_coefficient_uses_all_submissions_before_round_end(self):
+        user = User.objects.get(username="test_user")
+        isolated_round = Round.objects.create(
+            contest=self.contest,
+            name="Before end test round",
+            start_date=datetime(2012, 2, 1, tzinfo=UTC),
+            end_date=datetime(2012, 2, 2, tzinfo=UTC),
+            results_date=datetime(2012, 2, 3, tzinfo=UTC),
+            public_results_date=datetime(2012, 2, 3, tzinfo=UTC),
+        )
+        isolated_pi = ProblemInstance.objects.create(
+            round=isolated_round,
+            problem=self.pi1.problem,
+            short_name="before_end",
+        )
+        ranking = ConfigurableRanking.objects.create(contest=self.contest, name="Before end only")
+        config = ConfigurableRankingRound.objects.create(
+            ranking=ranking,
+            round=isolated_round,
+            order=1,
+            coefficient=1,
+            score_mode="best",
+            all_time_coefficient=1,
+            all_time_score_mode="best",
+            column_visibility="after_results",
+        )
+
+        self._create_scored_submission(
+            user,
+            isolated_pi,
+            25,
+            isolated_round.start_date - timedelta(hours=2),
+        )
+        self._create_scored_submission(
+            user,
+            isolated_pi,
+            20,
+            isolated_round.start_date + timedelta(hours=1),
+        )
+        self._create_scored_submission(
+            user,
+            isolated_pi,
+            30,
+            isolated_round.end_date + timedelta(hours=1),
+        )
+
+        request = self._request("test_user", datetime(2012, 8, 5, tzinfo=UTC))
+        data = self.controller.get_serialized_ranking(self.controller.get_full_key(request, ranking.partial_key))
+
+        self.assertEqual([cfg.id for cfg in data["round_configs"]], [config.id])
+        self.assertEqual(len(data["rows"]), 1)
+        self.assertEqual(str(data["rows"][0]["contest_total"]), "25")
+        self.assertEqual(str(data["rows"][0]["all_time_total"]), "30")
+        self.assertEqual(str(data["rows"][0]["total"]), "55")
+
+    def test_configurable_ranking_subranking_source_all_time_negative_coefficients_and_hidden_defaults(self):
+        contest = Contest.objects.create(
+            name="Hybrid contest",
+            controller_name="oioioi.programs.controllers.ProgrammingContestController",
+        )
+        round1 = Round.objects.create(
+            contest=contest,
+            name="Alpha",
+            start_date=datetime(2012, 1, 1, tzinfo=UTC),
+            end_date=datetime(2012, 1, 2, tzinfo=UTC),
+            results_date=datetime(2012, 1, 3, tzinfo=UTC),
+            public_results_date=datetime(2012, 1, 3, tzinfo=UTC),
+        )
+        round2 = Round.objects.create(
+            contest=contest,
+            name="Beta",
+            start_date=datetime(2012, 1, 4, tzinfo=UTC),
+            end_date=datetime(2012, 1, 5, tzinfo=UTC),
+            results_date=datetime(2012, 1, 6, tzinfo=UTC),
+            public_results_date=datetime(2012, 1, 6, tzinfo=UTC),
+        )
+        problem = self.pi1.problem
+        pi_round1 = ProblemInstance.objects.create(round=round1, problem=problem, short_name="hyb1")
+        pi_round2 = ProblemInstance.objects.create(round=round2, problem=problem, short_name="hyb2")
+        user1 = User.objects.get(username="test_user")
+        user2 = User.objects.get(username="test_user2")
+
+        self._create_scored_submission(user1, pi_round1, 30, datetime(2012, 1, 1, 12, 0, tzinfo=UTC))
+        self._create_scored_submission(user1, pi_round1, 10, datetime(2012, 1, 1, 13, 0, tzinfo=UTC))
+        self._create_scored_submission(user1, pi_round1, 100, datetime(2012, 1, 2, 12, 0, tzinfo=UTC))
+        self._create_scored_submission(user1, pi_round2, 40, datetime(2012, 1, 4, 12, 0, tzinfo=UTC))
+        self._create_scored_submission(user1, pi_round2, 20, datetime(2012, 1, 4, 13, 0, tzinfo=UTC))
+        self._create_scored_submission(user2, pi_round1, 15, datetime(2012, 1, 1, 12, 30, tzinfo=UTC))
+        self._create_scored_submission(user2, pi_round2, 25, datetime(2012, 1, 4, 12, 30, tzinfo=UTC))
+
+        daily_ranking = ConfigurableRanking.objects.create(contest=contest, name="Daily")
+        daily_config1 = ConfigurableRankingRound.objects.create(
+            ranking=daily_ranking,
+            source_type="round",
+            round=round1,
+            order=1,
+            coefficient=1,
+            score_mode="last",
+            all_time_coefficient=1,
+            all_time_score_mode="best",
+            column_visibility="after_results",
+        )
+        daily_config2 = ConfigurableRankingRound.objects.create(
+            ranking=daily_ranking,
+            source_type="round",
+            round=round2,
+            order=2,
+            coefficient=1,
+            score_mode="last",
+            all_time_coefficient=1,
+            all_time_score_mode="best",
+            column_visibility="after_results",
+        )
+
+        ranking = ConfigurableRanking.objects.create(contest=contest, name="Hybrid")
+        subranking_config = ConfigurableRankingRound.objects.create(
+            ranking=ranking,
+            source_type="sub_ranking",
+            sub_ranking=daily_ranking,
+            order=1,
+            coefficient=2,
+            score_mode="last",
+            all_time_coefficient=1,
+            all_time_score_mode="best",
+            column_visibility="after_results",
+        )
+        round_config = ConfigurableRankingRound.objects.create(
+            ranking=ranking,
+            source_type="round",
+            round=round1,
+            order=2,
+            coefficient=-1,
+            score_mode="last",
+            all_time_coefficient=0,
+            all_time_score_mode="best",
+            column_visibility="after_results",
+        )
+        ConfigurableRankingSettings.objects.create(contest=contest, show_default_rankings=False)
+
+        controller = contest.controller.ranking_controller()
+        timestamp = datetime(2012, 8, 5, tzinfo=UTC)
+
+        regular_request = self.factory.get("/")
+        regular_request.user = user1
+        regular_request.contest = contest
+        regular_request.timestamp = timestamp
+
+        admin_request = self.factory.get("/")
+        admin_request.user = User.objects.get(username="test_admin")
+        admin_request.contest = contest
+        admin_request.timestamp = timestamp
+
+        self.assertEqual(controller.available_rankings(regular_request), [(ranking.partial_key, "Hybrid")])
+        self.assertEqual(
+            controller.get_full_key(regular_request, ranking.partial_key),
+            (
+                f"regular#{ranking.partial_key}|"
+                f"r{daily_ranking.id}:{daily_config1.id},{daily_config2.id};"
+                f"r{ranking.id}:{subranking_config.id},{round_config.id}"
+            ),
+        )
+
+        data = controller.get_serialized_ranking(controller.get_full_key(admin_request, ranking.partial_key))
+        self.assertEqual([config.source_name for config in data["round_configs"]], [daily_ranking.name, round1.name])
+        self.assertEqual(
+            [column["label"] for column in data["problem_columns"]],
+            [
+                "Daily / Alpha / hyb1",
+                "Daily / Beta / hyb2",
+                "Alpha / hyb1",
+            ],
+        )
+        self.assertEqual([row["user"].username for row in data["rows"][:2]], ["test_user", "test_user2"])
+        self.assertEqual(data["rows"][0]["contest_total"], 50)
+        self.assertEqual(data["rows"][0]["all_time_total"], 140)
+        self.assertEqual(data["rows"][0]["round_scores"], [200, -10])
+        self.assertEqual(data["rows"][0]["problem_score_displays"], ["120", "80", "-10"])
+        self.assertEqual(data["rows"][0]["total"], 190)
+        self.assertEqual(data["rows"][1]["contest_total"], 65)
+        self.assertEqual(data["rows"][1]["all_time_total"], 40)
+        self.assertEqual(data["rows"][1]["round_scores"], [120, -15])
+        self.assertEqual(data["rows"][1]["problem_score_displays"], ["45", "75", "-15"])
+        self.assertEqual(data["rows"][1]["total"], 105)
+
+        self.assertTrue(self.client.login(username="test_admin"))
+        url = reverse("ranking_csv", kwargs={"contest_id": contest.id, "key": ranking.partial_key})
+        with fake_time(timestamp):
+            response = self.client.get(url)
+        content = response.content.decode("utf-8")
+        self.assertIn(
+            f"No.,Login,First name,Last name,Sum,{daily_ranking.name},Alpha,Daily / Alpha / hyb1,Daily / Beta / hyb2,Alpha / hyb1",
+            content,
+        )
+        self.assertIn("1,test_user,Test,User,190,200,-10,120,80,-10", content)
+        self.assertIn("2,test_user2,Test,User 2,105,120,-15,45,75,-15", content)
+
+    def test_configurable_ranking_invalidation_targets_only_related_rankings(self):
+        ranking1 = ConfigurableRanking.objects.create(contest=self.contest, name="Round 1 ranking")
+        config1 = ConfigurableRankingRound.objects.create(
+            ranking=ranking1,
+            round=self.round1,
+            order=1,
+            score_mode="last",
+            column_visibility="after_results",
+        )
+        ranking2 = ConfigurableRanking.objects.create(contest=self.contest, name="Round 2 ranking")
+        config2 = ConfigurableRankingRound.objects.create(
+            ranking=ranking2,
+            round=self.round2,
+            order=1,
+            score_mode="last",
+            column_visibility="after_start",
+        )
+        ranking3 = ConfigurableRanking.objects.create(contest=self.contest, name="Parent ranking")
+        config3 = ConfigurableRankingRound.objects.create(
+            ranking=ranking3,
+            source_type="sub_ranking",
+            sub_ranking=ranking1,
+            order=1,
+            score_mode="last",
+            column_visibility="after_results",
+        )
+
+        affected = [
+            self._make_cached_ranking(f"admin#{ranking1.partial_key}"),
+            self._make_cached_ranking(f"observer#{ranking1.partial_key}"),
+            self._make_cached_ranking(f"regular#{ranking1.partial_key}|r{ranking1.id}:{config1.id}"),
+            self._make_cached_ranking(f"admin#{ranking3.partial_key}"),
+            self._make_cached_ranking(f"observer#{ranking3.partial_key}"),
+            self._make_cached_ranking(f"regular#{ranking3.partial_key}|r{ranking1.id}:{config1.id};r{ranking3.id}:{config3.id}"),
+        ]
+        unaffected = [
+            self._make_cached_ranking(f"admin#{ranking2.partial_key}"),
+            self._make_cached_ranking(f"observer#{ranking2.partial_key}"),
+            self._make_cached_ranking(f"regular#{ranking2.partial_key}|r{ranking2.id}:{config2.id}"),
+        ]
+
+        self.controller.invalidate_pi(self.pi1)
+
+        for ranking in affected:
+            ranking.refresh_from_db()
+            self.assertFalse(ranking.is_up_to_date())
+        for ranking in unaffected:
+            ranking.refresh_from_db()
+            self.assertTrue(ranking.is_up_to_date())
 
 
 class MockRankingController(DefaultRankingController):

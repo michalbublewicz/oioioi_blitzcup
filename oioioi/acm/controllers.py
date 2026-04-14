@@ -60,6 +60,9 @@ class ACMContestController(ProgrammingContestController):
     def get_penalty_time(self):
         return ACMScore.DEFAULT_PENALTY_TIME
 
+    def supports_configurable_round_rankings(self):
+        return False
+
     def fill_evaluation_environ(self, environ, submission):
         environ["group_scorer"] = "oioioi.acm.utils.acm_group_scorer"
         environ["test_scorer"] = "oioioi.acm.utils.acm_test_scorer"

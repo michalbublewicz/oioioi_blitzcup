@@ -821,6 +821,9 @@ class ProgrammingContestController(ContestController):
         time used exceeds half of the time limit. False by default."""
         return False
 
+    def supports_configurable_round_rankings(self):
+        return True
+
     def get_compiler_for_submission(self, submission):
         problem_instance = submission.problem_instance
         return problem_instance.problem.controller.get_compiler_for_submission(submission)

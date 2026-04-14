@@ -25,7 +25,7 @@ from oioioi.rankings.utils import get_ranking_message
 def has_any_ranking_visible(request):
     ccontroller = request.contest.controller
     rcontroller = ccontroller.ranking_controller()
-    return ccontroller.can_see_ranking(request) and bool(rcontroller.available_rankings(request))
+    return ccontroller.can_see_ranking(request) and rcontroller.has_any_visible_ranking(request)
 
 
 @enforce_condition(contest_exists & can_enter_contest & is_contest_basicadmin)

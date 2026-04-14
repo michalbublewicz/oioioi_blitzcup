@@ -1,14 +1,22 @@
 import logging
 import pickle
+from collections import defaultdict
 from datetime import timedelta  # pylint: disable=E0611
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.db import models, transaction
+from django.db.models import Q
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
+from oioioi.base.fields import EnumField, EnumRegistry
 from oioioi.base.models import PublicMessage
-from oioioi.contests.models import Contest
+from oioioi.contests.models import Contest, Round
+
+_configurable_ranking_structure_versions = defaultdict(int)
 
 
 class RankingRecalc(models.Model):
@@ -221,3 +229,255 @@ class RankingMessage(PublicMessage):
     class Meta:
         verbose_name = _("ranking message")
         verbose_name_plural = _("ranking messages")
+
+
+configurable_ranking_medal_schemes = EnumRegistry()
+configurable_ranking_medal_schemes.register("none", _("No medals"))
+configurable_ranking_medal_schemes.register("ioi", _("IOI"))
+configurable_ranking_medal_schemes.register("og", _("Olympic podium"))
+
+configurable_ranking_score_modes = EnumRegistry()
+configurable_ranking_score_modes.register("best", _("Best submission"))
+configurable_ranking_score_modes.register("last", _("Last submission"))
+configurable_ranking_score_modes.register("last_revealed", _("Last submission with revealed-score fallback"))
+
+configurable_ranking_source_types = EnumRegistry()
+configurable_ranking_source_types.register("round", _("Round"))
+configurable_ranking_source_types.register("sub_ranking", _("Sub-ranking"))
+
+configurable_ranking_column_visibility = EnumRegistry()
+configurable_ranking_column_visibility.register("never", _("Never visible"))
+configurable_ranking_column_visibility.register("after_start", _("Visible after the round starts"))
+configurable_ranking_column_visibility.register("after_end", _("Visible after the round ends"))
+configurable_ranking_column_visibility.register("after_results", _("Visible after results are published"))
+
+
+def configurable_ranking_partial_key(ranking_id):
+    return f"cr{ranking_id}"
+
+
+def bump_configurable_ranking_structure_version(contest_id):
+    if contest_id is not None:
+        _configurable_ranking_structure_versions[contest_id] += 1
+
+
+def get_configurable_ranking_structure_version(contest_id):
+    return _configurable_ranking_structure_versions.get(contest_id, 0)
+
+
+def invalidate_configurable_ranking_cache(contest_id, ranking_id):
+    partial_key = configurable_ranking_partial_key(ranking_id)
+    predicate = Q()
+    for permission in ("admin", "observer", "regular"):
+        full_key = f"{permission}#{partial_key}"
+        predicate |= Q(key=full_key) | Q(key__startswith=full_key + "|")
+    Ranking.invalidate_queryset(Ranking.objects.filter(contest_id=contest_id).filter(predicate))
+
+
+class ConfigurableRanking(models.Model):
+    contest = models.ForeignKey(Contest, related_name="configurable_rankings", on_delete=models.CASCADE)
+    name = models.CharField(max_length=255, verbose_name=_("name"))
+    order = models.IntegerField(default=0, verbose_name=_("order"))
+    medal_scheme = EnumField(
+        configurable_ranking_medal_schemes,
+        default="none",
+        verbose_name=_("medal scheme"),
+    )
+    show_sum = models.BooleanField(default=True, verbose_name=_("show sum"))
+    show_percentage = models.BooleanField(default=False, verbose_name=_("show percentage"))
+    show_difference = models.BooleanField(default=False, verbose_name=_("show leader difference"))
+
+    class Meta:
+        ordering = ("contest", "order", "name", "id")
+        verbose_name = _("configurable ranking")
+        verbose_name_plural = _("configurable rankings")
+
+    def __str__(self):
+        return str(self.name)
+
+    @property
+    def partial_key(self):
+        return configurable_ranking_partial_key(self.id)
+
+    def clean(self):
+        if self.contest_id and not self.contest.controller.supports_configurable_round_rankings():
+            raise ValidationError(_("This contest type does not support configurable rankings."))
+
+    def invalidate_cached_rankings(self):
+        if self.id is not None:
+            invalidate_configurable_ranking_cache(self.contest_id, self.id)
+
+
+class ConfigurableRankingSettings(models.Model):
+    contest = models.OneToOneField(Contest, on_delete=models.CASCADE)
+    show_default_rankings = models.BooleanField(
+        default=True,
+        verbose_name=_("show default rankings"),
+        help_text=_("Determines whether the built-in contest and round rankings remain visible alongside configurable ones."),
+    )
+
+    class Meta:
+        verbose_name = _("configurable ranking settings")
+        verbose_name_plural = _("configurable ranking settings")
+
+    def clean(self):
+        if self.contest_id and not self.contest.controller.supports_configurable_round_rankings():
+            raise ValidationError(_("This contest type does not support configurable rankings."))
+
+
+class ConfigurableRankingRound(models.Model):
+    ranking = models.ForeignKey(
+        ConfigurableRanking,
+        related_name="round_configs",
+        verbose_name=_("ranking"),
+        on_delete=models.CASCADE,
+    )
+    source_type = EnumField(
+        configurable_ranking_source_types,
+        default="round",
+        verbose_name=_("source type"),
+    )
+    round = models.ForeignKey(
+        Round,
+        verbose_name=_("round"),
+        blank=True,
+        null=True,
+        on_delete=models.CASCADE,
+    )
+    sub_ranking = models.ForeignKey(
+        "ConfigurableRanking",
+        related_name="referencing_round_configs",
+        verbose_name=_("sub-ranking"),
+        blank=True,
+        null=True,
+        on_delete=models.CASCADE,
+    )
+    order = models.IntegerField(default=0, verbose_name=_("order"))
+    coefficient = models.IntegerField(default=1, verbose_name=_("coefficient"))
+    score_mode = EnumField(
+        configurable_ranking_score_modes,
+        default="best",
+        verbose_name=_("score mode"),
+    )
+    all_time_coefficient = models.IntegerField(default=0, verbose_name=_("all-time coefficient"))
+    all_time_score_mode = EnumField(
+        configurable_ranking_score_modes,
+        default="best",
+        verbose_name=_("all-time score mode"),
+    )
+    column_visibility = EnumField(
+        configurable_ranking_column_visibility,
+        default="after_results",
+        verbose_name=_("column visibility"),
+    )
+    ignore_submissions_after = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("ignore submissions after"),
+    )
+
+    class Meta:
+        ordering = ("ranking", "order", "id")
+        verbose_name = _("configurable ranking source")
+        verbose_name_plural = _("configurable ranking sources")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("ranking", "round"),
+                condition=Q(round__isnull=False),
+                name="rankings_unique_round_source_per_ranking",
+            ),
+            models.UniqueConstraint(
+                fields=("ranking", "sub_ranking"),
+                condition=Q(sub_ranking__isnull=False),
+                name="rankings_unique_subranking_source_per_ranking",
+            ),
+        ]
+
+    def __str__(self):
+        return self.source_name
+
+    @property
+    def source_name(self):
+        if self.source_type == "sub_ranking" and self.sub_ranking_id:
+            return str(self.sub_ranking.name)
+        if self.round_id:
+            return str(self.round.name)
+        return str(_("Unknown source"))
+
+    def _sub_ranking_descendants(self):
+        seen = set()
+        pending = [self.sub_ranking_id]
+        while pending:
+            ranking_id = pending.pop()
+            if ranking_id in seen or ranking_id is None:
+                continue
+            seen.add(ranking_id)
+            pending.extend(
+                ConfigurableRankingRound.objects.filter(
+                    ranking_id=ranking_id,
+                    sub_ranking_id__isnull=False,
+                ).values_list("sub_ranking_id", flat=True)
+            )
+        return seen
+
+    def clean(self):
+        if self.source_type == "round":
+            if not self.round_id:
+                raise ValidationError({"round": _("A round source must have a round selected.")})
+            if self.ranking_id and self.ranking.contest_id != self.round.contest_id:
+                raise ValidationError({"round": _("The selected round must belong to the same contest as the ranking.")})
+            if self.sub_ranking_id:
+                raise ValidationError({"sub_ranking": _("Round sources cannot also select a sub-ranking.")})
+            return
+
+        if self.source_type == "sub_ranking":
+            if not self.sub_ranking_id:
+                raise ValidationError({"sub_ranking": _("A sub-ranking source must have a sub-ranking selected.")})
+            if self.round_id:
+                raise ValidationError({"round": _("Sub-ranking sources should not select a round.")})
+            if self.ranking_id and self.sub_ranking.contest_id != self.ranking.contest_id:
+                raise ValidationError({"sub_ranking": _("The selected sub-ranking must belong to the same contest as the ranking.")})
+            if self.ranking_id and self.sub_ranking_id == self.ranking_id:
+                raise ValidationError({"sub_ranking": _("A ranking cannot include itself as a sub-ranking.")})
+            if self.ranking_id and self.ranking_id in self._sub_ranking_descendants():
+                raise ValidationError({"sub_ranking": _("This sub-ranking would create a cycle.")})
+            return
+
+        raise ValidationError(_("Unknown configurable ranking source type."))
+
+    def invalidate_cached_rankings(self):
+        self.ranking.invalidate_cached_rankings()
+
+
+@receiver(post_save, sender=ConfigurableRanking)
+def _invalidate_configurable_ranking_on_save(sender, instance, **kwargs):
+    bump_configurable_ranking_structure_version(instance.contest_id)
+    instance.invalidate_cached_rankings()
+
+
+@receiver(post_delete, sender=ConfigurableRanking)
+def _invalidate_configurable_ranking_on_delete(sender, instance, **kwargs):
+    bump_configurable_ranking_structure_version(instance.contest_id)
+    instance.invalidate_cached_rankings()
+
+
+@receiver(post_save, sender=ConfigurableRankingRound)
+def _invalidate_configurable_ranking_round_on_save(sender, instance, **kwargs):
+    bump_configurable_ranking_structure_version(instance.ranking.contest_id)
+    instance.invalidate_cached_rankings()
+
+
+@receiver(post_delete, sender=ConfigurableRankingRound)
+def _invalidate_configurable_ranking_round_on_delete(sender, instance, **kwargs):
+    bump_configurable_ranking_structure_version(instance.ranking.contest_id)
+    instance.invalidate_cached_rankings()
+
+
+@receiver(post_save, sender=ConfigurableRankingSettings)
+def _invalidate_configurable_ranking_settings_on_save(sender, instance, **kwargs):
+    bump_configurable_ranking_structure_version(instance.contest_id)
+
+
+@receiver(post_delete, sender=ConfigurableRankingSettings)
+def _invalidate_configurable_ranking_settings_on_delete(sender, instance, **kwargs):
+    bump_configurable_ranking_structure_version(instance.contest_id)

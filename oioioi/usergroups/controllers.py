@@ -54,12 +54,21 @@ class UserGroupsDefaultRankingControllerMixin:
     def available_rankings(self, request):
         rankings = super().available_rankings(request)
         if len(rankings) == 0:
-            # User cannot see any rounds.
-            return []
+            can_see_all = is_contest_basicadmin(request) or is_contest_observer(request)
+            if not list(self._iter_rounds(can_see_all, request.timestamp, CONTEST_RANKING_KEY, request)):
+                # User cannot see any rounds.
+                return []
 
         for user_group in self._user_groups_for_ranking(request):
             rankings.append((user_group_ranking_id(user_group.id), user_group.name))
         return rankings
+
+    def has_any_visible_ranking(self, request):
+        if super().has_any_visible_ranking(request):
+            return True
+        for _ in self._user_groups_for_ranking(request):
+            return True
+        return False
 
     def partial_keys_for_probleminstance(self, pi):
         partial_keys = super().partial_keys_for_probleminstance(pi)

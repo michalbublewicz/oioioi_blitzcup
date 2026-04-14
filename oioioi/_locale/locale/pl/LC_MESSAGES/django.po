@@ -116,6 +116,54 @@ msgstr "Konkurs typu ACM (otwarty)"
 msgid "ACM style ranking"
 msgstr "Ranking typu ACM"
 
+msgid "show default rankings"
+msgstr "pokazuj domyślne rankingi"
+
+msgid "Determines whether the built-in contest and round rankings remain visible alongside configurable ones."
+msgstr "Określa, czy wbudowane rankingi konkursu i rund pozostają widoczne obok rankingów konfigurowalnych."
+
+msgid "configurable ranking settings"
+msgstr "ustawienia konfigurowalnych rankingów"
+
+msgid "Sub-ranking"
+msgstr "podranking"
+
+msgid "source type"
+msgstr "typ źródła"
+
+msgid "sub-ranking"
+msgstr "podranking"
+
+msgid "all-time coefficient"
+msgstr "współczynnik wszech czasów"
+
+msgid "all-time score mode"
+msgstr "tryb wyniku wszech czasów"
+
+msgid "configurable ranking source"
+msgstr "źródło konfigurowalnego rankingu"
+
+msgid "configurable ranking sources"
+msgstr "źródła konfigurowalnego rankingu"
+
+msgid "post-end submissions until"
+msgstr "zgłoszenia po zakończeniu do"
+
+msgid "Post-end submissions until"
+msgstr "Zgłoszenia po zakończeniu do"
+
+msgid "If set, participants may continue submitting after the round ends until this time."
+msgstr "Jeśli ustawione, uczestnicy mogą nadal wysyłać rozwiązania po zakończeniu rundy aż do tego momentu."
+
+msgid "You need to set an end date before allowing submissions after the round."
+msgstr "Musisz ustawić datę zakończenia rundy, zanim zezwolisz na zgłoszenia po jej zakończeniu."
+
+msgid "Post-end submissions time must be after the round end date."
+msgstr "Czas zgłoszeń po zakończeniu musi przypadać po dacie zakończenia rundy."
+
+msgid "%(source)s / %(problem)s"
+msgstr "%(source)s / %(problem)s"
+
 #: acm/controllers.py:258
 msgid "#"
 msgstr "Lp."

@@ -21,6 +21,7 @@ from oioioi.contests.menu import contest_admin_menu_registry
 from oioioi.contests.models import (
     LimitsVisibilityConfig,
     ProblemInstance,
+    ProblemScoreDisplayConfig,
     ProblemStatementConfig,
     RankingVisibilityConfig,
     RegistrationAvailabilityConfig,
@@ -120,6 +121,35 @@ class RankingVisibilityConfigAdminMixin:
 
 
 ContestAdmin.mix_in(RankingVisibilityConfigAdminMixin)
+
+
+class ProblemScoreDisplayConfigInline(admin.TabularInline):
+    model = ProblemScoreDisplayConfig
+    extra = 1
+    max_num = 1
+    category = _("Advanced")
+
+    def has_add_permission(self, request, obj=None):
+        return is_contest_admin(request)
+
+    def has_change_permission(self, request, obj=None):
+        return is_contest_admin(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return is_contest_admin(request)
+
+
+class ProblemScoreDisplayConfigAdminMixin:
+    """Adds :class:`~oioioi.contests.models.ProblemScoreDisplayConfig` to an admin
+    panel.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.inlines = tuple(self.inlines) + (ProblemScoreDisplayConfigInline,)
+
+
+ContestAdmin.mix_in(ProblemScoreDisplayConfigAdminMixin)
 
 
 class LimitsVisibilityConfigInline(admin.TabularInline):

@@ -36,12 +36,15 @@ from oioioi.contests.models import (
     FilesMessage,
     LimitsVisibilityConfig,
     ProblemInstance,
+    ProblemScoreDisplayConfig,
     ProblemStatementConfig,
     RankingVisibilityConfig,
     RegistrationAvailabilityConfig,
     Round,
     RoundTimeExtension,
+    ScoreReport,
     Submission,
+    SubmissionReport,
     SubmissionMessage,
     SubmissionsMessage,
     SubmitMessage,
@@ -75,6 +78,7 @@ from oioioi.problems.models import (
 from oioioi.programs.controllers import ProgrammingContestController
 from oioioi.programs.models import ModelProgramSubmission, ProgramsConfig, Test
 from oioioi.programs.tests import SubmitFileMixin
+from oioioi.rankings.models import ConfigurableRankingSettings
 from oioioi.simpleui.views import (
     contest_dashboard_redirect as simpleui_contest_dashboard,
 )
@@ -1094,6 +1098,32 @@ class TestSubmitButtonInProblemsList(TestCase):
 
         with fake_time(datetime(2020, 1, 2, tzinfo=UTC)):
             self.assertTrue(self.client.login(username="test_user"))
+            response = self.client.get(reverse("problems_list", kwargs={"contest_id": contest.id}))
+            self.assertNotContains(
+                response,
+                reverse("submit", kwargs={"problem_instance_id": pi.id}),
+                status_code=200,
+            )
+
+    def test_with_post_end_submission_deadline(self):
+        round = Round.objects.get()
+        round.end_date = datetime(2020, 1, 1, tzinfo=UTC)
+        round.post_end_submission_deadline = datetime(2020, 1, 2, 12, tzinfo=UTC)
+        round.save()
+
+        contest = Contest.objects.get()
+        pi = ProblemInstance.objects.get()
+
+        with fake_time(datetime(2020, 1, 2, 11, tzinfo=UTC)):
+            self.assertTrue(self.client.login(username="test_user"))
+            response = self.client.get(reverse("problems_list", kwargs={"contest_id": contest.id}))
+            self.assertContains(
+                response,
+                reverse("submit", kwargs={"problem_instance_id": pi.id}),
+                status_code=200,
+            )
+
+        with fake_time(datetime(2020, 1, 2, 13, tzinfo=UTC)):
             response = self.client.get(reverse("problems_list", kwargs={"contest_id": contest.id}))
             self.assertNotContains(
                 response,
@@ -5010,6 +5040,208 @@ class TestScoreBadges(TestCase):
         self.assertIn("badge-success", self._get_badge_for_problem(response.content, "zad1"))
         self.assertIn("badge-warning", self._get_badge_for_problem(response.content, "zad2"))
         self.assertIn("badge-danger", self._get_badge_for_problem(response.content, "zad3"))
+
+
+class TestProblemScoreDisplayConfig(TestCase):
+    fixtures = [
+        "test_users",
+        "test_contest",
+        "test_full_package",
+        "test_problem_instance",
+        "test_submissions_best_score_is_final",
+        "test_permissions",
+    ]
+
+    def _create_scored_submission(self, user, problem_instance, score, date):
+        submission = Submission.objects.create(
+            status="OK",
+            problem_instance=problem_instance,
+            kind="NORMAL",
+            comment="",
+            score=IntegerScore(score),
+            user=user,
+            date=date,
+        )
+        report = SubmissionReport.objects.create(
+            status="ACTIVE",
+            kind="NORMAL",
+            submission=submission,
+            creation_date=date,
+        )
+        ScoreReport.objects.create(
+            status="OK",
+            comment=None,
+            score=IntegerScore(score),
+            max_score=IntegerScore(100),
+            submission_report=report,
+        )
+        return submission
+
+    def _problem_result(self, response, short_name):
+        for problem in response.context["problem_instances"]:
+            if problem[0].short_name == short_name:
+                return problem[4]
+        self.fail(f"Problem {short_name} not found in problems list response.")
+
+    def _api_problem(self, response, short_name):
+        for problem in response.json():
+            if problem["short_name"] == short_name:
+                return problem
+        self.fail(f"Problem {short_name} not found in problems API response.")
+
+    @staticmethod
+    def _strip_ws(response):
+        return re.sub(r"\s*", "", response.content.decode("utf-8"))
+
+    def test_problem_score_display_defaults_to_last_and_ranking_is_unchanged(self):
+        contest = Contest.objects.get()
+        problem_instance = ProblemInstance.objects.get(pk=1)
+        self.assertEqual(ProblemScoreDisplayConfig(contest=contest).score_mode, "last")
+
+        self._create_scored_submission(
+            User.objects.get(username="test_user"),
+            problem_instance,
+            20,
+            datetime(2015, 1, 1, tzinfo=UTC),
+        )
+
+        self.assertTrue(self.client.login(username="test_user"))
+        with fake_time(datetime(2015, 8, 5, tzinfo=UTC)):
+            response = self.client.get(reverse("problems_list", kwargs={"contest_id": contest.id}))
+            self.assertEqual(self._problem_result(response, "zad1").score, IntegerScore(20))
+
+            api_response = self.client.get(reverse("api_problem_list", args=(contest.id,)))
+            self.assertEqual(str(self._api_problem(api_response, "zad1")["user_result"]["score"]), "20")
+
+            ranking_response = self.client.get(reverse("default_ranking", kwargs={"contest_id": contest.id}))
+            self.assertIn(">42<", self._strip_ws(ranking_response))
+
+    def test_problem_score_display_best_mode_and_admin_inline_persists(self):
+        contest = Contest.objects.get()
+        problem_instance = ProblemInstance.objects.get(pk=1)
+        user = User.objects.get(username="test_user")
+        self._create_scored_submission(
+            user,
+            problem_instance,
+            20,
+            datetime(2015, 1, 1, tzinfo=UTC),
+        )
+
+        self.assertTrue(self.client.login(username="test_admin"))
+        self.client.get(f"/c/{contest.id}/")
+        url = reverse("oioioiadmin:contests_contest_change", args=(quote(contest.id),))
+        post_data = make_empty_contest_formset()
+        post_data.update(
+            {
+                "name": contest.name,
+                "start_date_0": "2011-07-31",
+                "start_date_1": "20:27:58",
+                "end_date_0": "",
+                "end_date_1": "",
+                "results_date_0": "2012-07-31",
+                "results_date_1": "20:27:58",
+                "problemscoredisplayconfig-TOTAL_FORMS": "1",
+                "problemscoredisplayconfig-INITIAL_FORMS": "0",
+                "problemscoredisplayconfig-MIN_NUM_FORMS": "0",
+                "problemscoredisplayconfig-MAX_NUM_FORMS": "1",
+                "problemscoredisplayconfig-0-id": "",
+                "problemscoredisplayconfig-0-contest": contest.id,
+                "problemscoredisplayconfig-0-score_mode": "best",
+            }
+        )
+        response = self.client.post(url, post_data, follow=True)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            ProblemScoreDisplayConfig.objects.get(contest=contest).score_mode,
+            "best",
+        )
+
+        self.assertTrue(self.client.login(username="test_user"))
+        with fake_time(datetime(2015, 8, 5, tzinfo=UTC)):
+            response = self.client.get(reverse("problems_list", kwargs={"contest_id": contest.id}))
+            self.assertEqual(self._problem_result(response, "zad1").score, IntegerScore(42))
+
+            api_response = self.client.get(reverse("api_problem_list", args=(contest.id,)))
+            self.assertEqual(str(self._api_problem(api_response, "zad1")["user_result"]["score"]), "42")
+
+
+class TestProblemScoreDisplayHiddenScores(TestCase):
+    fixtures = [
+        "test_users",
+        "test_contest",
+        "test_full_package",
+        "test_problem_instance",
+        "test_submission",
+        "test_extra_rounds",
+    ]
+
+    def _problem_result(self, response, short_name):
+        for problem in response.context["problem_instances"]:
+            if problem[0].short_name == short_name:
+                return problem[4]
+        self.fail(f"Problem {short_name} not found in problems list response.")
+
+    def _api_problem(self, response, short_name):
+        for problem in response.json():
+            if problem["short_name"] == short_name:
+                return problem
+        self.fail(f"Problem {short_name} not found in problems API response.")
+
+    def test_hidden_scores_remain_hidden_with_best_mode(self):
+        contest = Contest.objects.get()
+        ProblemScoreDisplayConfig.objects.create(contest=contest, score_mode="best")
+
+        self.assertTrue(self.client.login(username="test_user"))
+        with fake_time(datetime(2012, 8, 5, tzinfo=UTC)):
+            response = self.client.get(reverse("problems_list", kwargs={"contest_id": contest.id}))
+            self.assertIsNone(self._problem_result(response, "zad3"))
+
+            api_response = self.client.get(reverse("api_problem_list", args=(contest.id,)))
+            user_result = self._api_problem(api_response, "zad3")["user_result"]
+            if user_result is None:
+                self.assertIsNone(user_result)
+            else:
+                self.assertIsNone(user_result["score"])
+
+
+class TestConfigurableRankingSettings(TestCase):
+    fixtures = [
+        "test_users",
+        "test_contest",
+        "test_permissions",
+    ]
+
+    def test_hide_default_rankings_inline_persists(self):
+        contest = Contest.objects.get()
+
+        self.assertTrue(self.client.login(username="test_admin"))
+        self.client.get(f"/c/{contest.id}/")
+        url = reverse("oioioiadmin:contests_contest_change", args=(quote(contest.id),))
+        post_data = make_empty_contest_formset()
+        post_data.update(
+            {
+                "name": contest.name,
+                "start_date_0": "2011-07-31",
+                "start_date_1": "20:27:58",
+                "end_date_0": "",
+                "end_date_1": "",
+                "results_date_0": "2012-07-31",
+                "results_date_1": "20:27:58",
+                "configurablerankingsettings-TOTAL_FORMS": "1",
+                "configurablerankingsettings-INITIAL_FORMS": "0",
+                "configurablerankingsettings-MIN_NUM_FORMS": "0",
+                "configurablerankingsettings-MAX_NUM_FORMS": "1",
+                "configurablerankingsettings-0-id": "",
+                "configurablerankingsettings-0-contest": contest.id,
+                "configurablerankingsettings-0-show_default_rankings": "",
+            }
+        )
+        response = self.client.post(url, post_data, follow=True)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            ConfigurableRankingSettings.objects.get(contest=contest).show_default_rankings
+        )
 
 
 class TestContestListFiltering(TestCase):

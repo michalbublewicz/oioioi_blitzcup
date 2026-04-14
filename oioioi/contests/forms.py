@@ -36,6 +36,11 @@ class SimpleContestForm(forms.ModelForm):
 
     start_date = forms.SplitDateTimeField(label=_("Start date"), widget=widgets.AdminSplitDateTime())
     end_date = forms.SplitDateTimeField(required=False, label=_("End date"), widget=widgets.AdminSplitDateTime())
+    post_end_submission_deadline = forms.SplitDateTimeField(
+        required=False,
+        label=_("Post-end submissions until"),
+        widget=widgets.AdminSplitDateTime(),
+    )
     results_date = forms.SplitDateTimeField(required=False, label=_("Results date"), widget=widgets.AdminSplitDateTime())
 
     def validate_years(year):
@@ -62,10 +67,11 @@ class SimpleContestForm(forms.ModelForm):
         now = timezone.now()
         self.initial["start_date"] = now
         self.initial["end_date"] = None
+        self.initial["post_end_submission_deadline"] = None
         self.initial["results_date"] = None
 
     def _set_dates(self, round):
-        for date in ["start_date", "end_date", "results_date"]:
+        for date in ["start_date", "end_date", "post_end_submission_deadline", "results_date"]:
             setattr(round, date, self.cleaned_data.get(date))
 
     def __init__(self, *args, **kwargs):
@@ -79,6 +85,7 @@ class SimpleContestForm(forms.ModelForm):
                 round = rounds[0]
                 self.initial["start_date"] = round.start_date
                 self.initial["end_date"] = round.end_date
+                self.initial["post_end_submission_deadline"] = round.post_end_submission_deadline
                 self.initial["results_date"] = round.results_date
             else:
                 self._generate_default_dates()

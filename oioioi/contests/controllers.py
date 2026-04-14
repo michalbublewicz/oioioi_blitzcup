@@ -634,7 +634,10 @@ class ContestController(RegisteredSubclassesBase, ObjectWithMixins):
 
         if check_round_times:
             rtimes = self.get_round_times(request, problem_instance.round)
-            return rtimes.is_active(request.timestamp)
+            if rtimes.is_active(request.timestamp):
+                return True
+            deadline = problem_instance.round.post_end_submission_deadline
+            return deadline is not None and request.timestamp <= deadline
         else:
             return True
 
@@ -1000,6 +1003,9 @@ class ContestController(RegisteredSubclassesBase, ObjectWithMixins):
         The default implementation returns an empty tuple.
         """
         return ()
+
+    def supports_configurable_round_rankings(self):
+        return False
 
     def is_onsite(self):
         """Determines whether the contest is on-site."""

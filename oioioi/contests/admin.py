@@ -131,6 +131,7 @@ class RoundInline(admin.StackedInline):
             "name",
             "start_date",
             "end_date",
+            "post_end_submission_deadline",
             "results_date",
             "public_results_date",
             "is_trial",
@@ -139,6 +140,7 @@ class RoundInline(admin.StackedInline):
             "name",
             "start_date",
             "end_date",
+            "post_end_submission_deadline",
             "results_date",
             "is_trial",
         ]

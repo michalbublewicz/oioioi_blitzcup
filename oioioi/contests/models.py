@@ -216,6 +216,12 @@ class Round(models.Model):
     name = models.CharField(max_length=255, verbose_name=_("name"), validators=[validate_whitespaces])
     start_date = models.DateTimeField(default=timezone.now, verbose_name=_("start date"))
     end_date = models.DateTimeField(blank=True, null=True, verbose_name=_("end date"))
+    post_end_submission_deadline = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("post-end submissions until"),
+        help_text=_("If set, participants may continue submitting after the round ends until this time."),
+    )
     results_date = models.DateTimeField(blank=True, null=True, verbose_name=_("results date"))
     public_results_date = models.DateTimeField(
         blank=True,
@@ -241,6 +247,11 @@ class Round(models.Model):
     def clean(self):
         if self.start_date and self.end_date and self.start_date > self.end_date:
             raise ValidationError(_("Start date should be before end date."))
+        if self.post_end_submission_deadline:
+            if self.end_date is None:
+                raise ValidationError(_("You need to set an end date before allowing submissions after the round."))
+            if self.post_end_submission_deadline <= self.end_date:
+                raise ValidationError(_("Post-end submissions time must be after the round end date."))
         if self.public_results_date:
             if self.results_date is None:
                 raise ValidationError(_("If you specify a public results date, you should enter a results date too."))
@@ -299,6 +310,25 @@ class RankingVisibilityConfig(models.Model):
     class Meta:
         verbose_name = _("ranking visibility config")
         verbose_name_plural = _("ranking visibility configs")
+
+
+problem_score_display_options = EnumRegistry()
+problem_score_display_options.register("last", _("Last submission"))
+problem_score_display_options.register("best", _("Best submission"))
+
+
+class ProblemScoreDisplayConfig(models.Model):
+    contest = models.OneToOneField("contests.Contest", on_delete=models.CASCADE)
+    score_mode = EnumField(
+        problem_score_display_options,
+        default="last",
+        verbose_name=_("problems score mode"),
+        help_text=_("Determines whether the Problems page shows the last or the best visible submission score."),
+    )
+
+    class Meta:
+        verbose_name = _("problem score display config")
+        verbose_name_plural = _("problem score display configs")
 
 
 limits_visibility_options = EnumRegistry()

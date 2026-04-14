@@ -242,14 +242,21 @@ class PARankingController(DefaultRankingController):
             return (r for r in rounds if not r.is_trial)
 
     def available_rankings(self, request):
-        rankings = [
-            (A_PLUS_B_RANKING_KEY, _("Division A + B")),
-            (B_RANKING_KEY, _("Division B")),
-        ]
-        for round in self._rounds_for_ranking(request):
-            if round.is_trial:
-                rankings.append((str(round.id), round.name))
-        return rankings
+        rankings = []
+        if self._default_rankings_enabled():
+            rankings = [
+                (A_PLUS_B_RANKING_KEY, _("Division A + B")),
+                (B_RANKING_KEY, _("Division B")),
+            ]
+            for round in self._rounds_for_ranking(request):
+                if round.is_trial:
+                    rankings.append((str(round.id), round.name))
+        return self._append_configurable_rankings(rankings, request)
+
+    def has_any_visible_ranking(self, request):
+        if self._default_rankings_enabled():
+            return True
+        return bool(self._append_configurable_rankings([], request))
 
     def partial_keys_for_probleminstance(self, pi):
         partial_keys = []
@@ -280,11 +287,13 @@ class PADivCRankingController(PARankingController):
     description = _("PA style ranking (with division C)")
 
     def available_rankings(self, request):
-        rankings = [(A_PLUS_B_RANKING_KEY, _("Division A + B + C")), (B_RANKING_KEY, _("Division B + C"))]
-        for round in self._rounds_for_ranking(request):
-            if round.is_trial:
-                rankings.append((str(round.id), round.name))
-        return rankings
+        rankings = []
+        if self._default_rankings_enabled():
+            rankings = [(A_PLUS_B_RANKING_KEY, _("Division A + B + C")), (B_RANKING_KEY, _("Division B + C"))]
+            for round in self._rounds_for_ranking(request):
+                if round.is_trial:
+                    rankings.append((str(round.id), round.name))
+        return self._append_configurable_rankings(rankings, request)
 
     def _filter_pis_for_ranking(self, partial_key, queryset):
         if partial_key == A_PLUS_B_RANKING_KEY:
