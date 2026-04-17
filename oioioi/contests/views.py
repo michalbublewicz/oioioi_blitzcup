@@ -10,6 +10,7 @@ from django.http import HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
+from django.utils import timezone
 from django.utils.safestring import mark_safe
 from django.utils.translation import gettext_lazy as _
 from django.utils.translation import ngettext_lazy
@@ -35,6 +36,7 @@ from oioioi.contests.forms import (
 from oioioi.contests.models import (
     Contest,
     ContestAttachment,
+    ProblemEditorial,
     ProblemInstance,
     Submission,
     SubmissionReport,
@@ -134,6 +136,44 @@ def contest_rules_view(request):
     )
 
 
+def _can_access_problem_editorial(request, problem_instance, editorial=None):
+    if is_contest_basicadmin(request):
+        return True
+
+    if not request.contest.controller.can_see_problem(request, problem_instance):
+        return False
+
+    if editorial is None:
+        try:
+            editorial = problem_instance.editorial
+        except ProblemEditorial.DoesNotExist:
+            return False
+
+    timestamp = getattr(request, "timestamp", timezone.now())
+    return editorial.is_published(timestamp)
+
+
+def _get_visible_problem_editorials(request, problem_instances):
+    editorials = (
+        ProblemEditorial.objects.filter(problem_instance__in=problem_instances)
+        .select_related("problem_instance")
+    )
+    return {
+        editorial.problem_instance_id: {
+            "editorial": editorial,
+            "link": reverse(
+                "problem_editorial",
+                kwargs={
+                    "contest_id": request.contest.id,
+                    "problem_instance": editorial.problem_instance.short_name,
+                },
+            ),
+        }
+        for editorial in editorials
+        if _can_access_problem_editorial(request, editorial.problem_instance, editorial)
+    }
+
+
 @menu_registry.register_decorator(_("Problems"), lambda request: reverse("problems_list"), order=100)
 @enforce_condition(contest_exists & can_enter_contest)
 def problems_list_view(request):
@@ -151,7 +191,9 @@ def problems_list_view(request):
 
     problem_instances = visible_problem_instances(request)
 
-    # Problem statements in order
+    editorials_map = _get_visible_problem_editorials(request, problem_instances)
+
+    # Problem rows in order
     # 1) problem instance
     # 2) statement_visible
     # 3) round end time
@@ -159,6 +201,8 @@ def problems_list_view(request):
     # 5) number of submissions left
     # 6) submissions_limit
     # 7) can_submit
+    # 8) last submission
+    # 9) editorial link data
     # Sorted by (start_date, end_date, round name, problem name)
     # Preload user-related data to avoid N+1 queries
     results_map = get_problem_display_results_map(request, controller, problem_instances)
@@ -197,6 +241,7 @@ def problems_list_view(request):
                 pi.controller.get_submissions_limit(request, pi),
                 controller.can_submit(request, pi) and not is_contest_archived(request),
                 submission_template_context(request, last_submission_map[pi.id]) if pi.id in last_submission_map else None,
+                editorials_map.get(pi.id),
             )
             for pi in problem_instances
         ],
@@ -253,6 +298,17 @@ def problem_statement_view(request, problem_instance):
             statement_id=statement.id,
         )
     return stream_file(statement.content, statement.download_name)
+
+
+@enforce_condition(contest_exists & can_enter_contest)
+def problem_editorial_view(request, problem_instance):
+    pi = get_object_or_404(ProblemInstance, round__contest=request.contest, short_name=problem_instance)
+    editorial = get_object_or_404(ProblemEditorial, problem_instance=pi)
+
+    if not _can_access_problem_editorial(request, pi, editorial):
+        raise PermissionDenied
+
+    return stream_file(editorial.content, editorial.download_name)
 
 
 @enforce_condition(contest_exists & can_enter_contest)

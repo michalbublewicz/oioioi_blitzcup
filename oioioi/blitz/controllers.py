@@ -340,7 +340,7 @@ class BlitzContestController(ACMContestController):
         ordered = status['ordered_problem_instances']
         state_map = self._get_state_map(ordered)
         rows = []
-        for pi, statement_visible, _round_time, _problem_limits, result, submissions_left, submissions_limit, can_submit, last_submission in problems_statements:
+        for pi, statement_visible, _round_time, _problem_limits, result, submissions_left, submissions_limit, can_submit, last_submission, editorial in problems_statements:
             state = state_map.get(pi.id)
             if state and state.solved_by_id:
                 state_label = _('Solved')
@@ -363,6 +363,7 @@ class BlitzContestController(ACMContestController):
                     'submissions_limit': submissions_limit,
                     'can_submit': can_submit,
                     'last_submission': last_submission,
+                    'editorial': editorial,
                     'order': self.get_problem_position(pi, ordered),
                     'points': self.get_problem_points(pi, ordered),
                     'winner': get_user_display_name(state.solved_by) if state and state.solved_by_id else None,

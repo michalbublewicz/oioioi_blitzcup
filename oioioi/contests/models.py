@@ -33,6 +33,19 @@ def make_contest_filename(instance, filename):
     return f"contests/{instance.id}/{get_valid_filename(os.path.basename(filename))}"
 
 
+def make_problem_editorial_filename(instance, filename):
+    contest = instance.problem_instance.contest
+    sanitized_filename = get_valid_filename(os.path.basename(filename))
+    return f"contests/{contest.id}/editorials/{instance.problem_instance_id}/{sanitized_filename}"
+
+
+def validate_pdf_file(value):
+    filename = getattr(value, "name", value)
+    extension = os.path.splitext(str(filename))[1].lower()
+    if extension != ".pdf":
+        raise ValidationError(_("Only PDF files are allowed."))
+
+
 class Contest(models.Model):
     id = models.CharField(
         max_length=32,
@@ -462,6 +475,43 @@ class ProblemInstance(models.Model):
     @property
     def controller(self):
         return ProblemInstanceController(self)
+
+
+class ProblemEditorial(models.Model):
+    problem_instance = models.OneToOneField(
+        ProblemInstance,
+        related_name="editorial",
+        verbose_name=_("problem instance"),
+        on_delete=models.CASCADE,
+    )
+    content = FileField(
+        upload_to=make_problem_editorial_filename,
+        verbose_name=_("content"),
+        validators=[validate_pdf_file],
+    )
+    publication_date = models.DateTimeField(
+        blank=True,
+        null=True,
+        verbose_name=_("publication date"),
+    )
+
+    @property
+    def filename(self):
+        return os.path.split(self.content.name)[1]
+
+    @property
+    def download_name(self):
+        return f"{self.problem_instance.get_short_name_display()}-editorial.pdf"
+
+    def is_published(self, timestamp):
+        return self.publication_date is None or self.publication_date <= timestamp
+
+    def __str__(self):
+        return _("%(problem)s editorial") % {"problem": self.problem_instance}
+
+    class Meta:
+        verbose_name = _("problem editorial")
+        verbose_name_plural = _("problem editorials")
 
 
 @receiver(pre_save, sender=ProblemInstance)

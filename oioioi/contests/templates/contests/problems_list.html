@@ -93,7 +93,7 @@
                 </tr>
             </thead>
             <tbody>
-                {% for pi, statement_visible, round_time, problem_limits, result, submissions_left, submissions_limit, can_submit, last_submission in problem_instances %}
+                {% for pi, statement_visible, round_time, problem_limits, result, submissions_left, submissions_limit, can_submit, last_submission, editorial in problem_instances %}
                     {% if show_rounds %}
                         {% ifchanged pi.round %}
                             <tr class="problemlist-subheader">
@@ -112,6 +112,11 @@
                                 <a href="{{ link }}">{{ pi.problem.name }}</a>
                             {% else %}
                                 {{ pi.problem.name }}
+                            {% endif %}
+                            {% if editorial %}
+                                <span class="text-nowrap">
+                                    (<a href="{{ editorial.link }}">{% trans "Editorial" %}</a>)
+                                </span>
                             {% endif %}
                             {% if show_status %}
                                 {% if last_submission and last_submission.can_see_status %}

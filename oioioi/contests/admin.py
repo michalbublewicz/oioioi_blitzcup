@@ -40,6 +40,7 @@ from oioioi.contests.models import (
     ContestAttachment,
     ContestLink,
     ContestPermission,
+    ProblemEditorial,
     ProblemInstance,
     Round,
     RoundStartDelay,
@@ -347,9 +348,42 @@ contest_admin_menu_registry.register(
 )
 
 
+class ProblemEditorialInline(admin.TabularInline):
+    model = ProblemEditorial
+    extra = 1
+    max_num = 1
+    readonly_fields = ["content_link"]
+    fields = ["content", "content_link", "publication_date"]
+    category = NO_CATEGORY
+
+    def has_add_permission(self, request, obj=None):
+        return not is_contest_archived(request) and is_contest_basicadmin(request)
+
+    def has_change_permission(self, request, obj=None):
+        return not is_contest_archived(request) and is_contest_basicadmin(request)
+
+    def has_delete_permission(self, request, obj=None):
+        return not is_contest_archived(request) and is_contest_basicadmin(request)
+
+    def content_link(self, instance):
+        if instance.id is not None:
+            href = reverse(
+                "problem_editorial",
+                kwargs={
+                    "contest_id": str(instance.problem_instance.contest_id),
+                    "problem_instance": instance.problem_instance.short_name,
+                },
+            )
+            return make_html_link(href, instance.content.name)
+        return None
+
+    content_link.short_description = _("Content file")
+
+
 class ProblemInstanceAdmin(admin.ModelAdmin):
     form = ProblemInstanceForm
     fields = ("contest", "round", "problem", "short_name", "order", "submissions_limit")
+    inlines = [ProblemEditorialInline]
     list_display = ("name_link", "short_name_link", "order", "round", "package", "actions_field")
     readonly_fields = ("contest", "problem")
     ordering = ("-round__start_date", "order", "short_name")

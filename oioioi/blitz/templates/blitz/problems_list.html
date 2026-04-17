@@ -55,6 +55,11 @@
                         {% else %}
                             {{ row.pi.problem.name }}
                         {% endif %}
+                        {% if row.editorial %}
+                            <span class="text-nowrap">
+                                (<a href="{{ row.editorial.link }}">{% trans "Editorial" %}</a>)
+                            </span>
+                        {% endif %}
                         {% if row.last_submission and row.last_submission.can_see_status %}
                             <a href="{{ row.last_submission.link }}">
                                 <span class="badge {{ row.last_submission.badge_class }}">{{ row.last_submission.message }}</span>

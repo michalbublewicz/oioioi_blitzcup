@@ -14,6 +14,7 @@ from django.contrib.auth.models import AnonymousUser, User
 from django.core import mail
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from django.http import HttpResponse
 from django.template import RequestContext, Template
@@ -35,6 +36,7 @@ from oioioi.contests.models import (
     ContestView,
     FilesMessage,
     LimitsVisibilityConfig,
+    ProblemEditorial,
     ProblemInstance,
     ProblemScoreDisplayConfig,
     ProblemStatementConfig,
@@ -1949,6 +1951,128 @@ class TestAttachments(TestCase, TestStreamingMixin):
             pos = response.content.find(name.encode())
             self.assertTrue(pos > last)
             last = pos
+
+
+class TestProblemEditorials(TestCase):
+    fixtures = [
+        "test_users",
+        "test_contest",
+        "test_full_package",
+        "test_problem_instance",
+    ]
+
+    def setUp(self):
+        self.contest = Contest.objects.get(pk="c")
+        self.problem_instance = ProblemInstance.objects.get(contest=self.contest)
+        self.round = self.problem_instance.round
+        self.problems_url = reverse("problems_list", kwargs={"contest_id": self.contest.id})
+        self.editorial_url = reverse(
+            "problem_editorial",
+            kwargs={
+                "contest_id": self.contest.id,
+                "problem_instance": self.problem_instance.short_name,
+            },
+        )
+        self.pdf_content = b"%PDF-1.4 editorial"
+
+    def _time(self, hour):
+        return datetime(2011, 7, 31, hour, 0, 0, tzinfo=UTC)
+
+    def _create_editorial(self, publication_date):
+        return ProblemEditorial.objects.create(
+            problem_instance=self.problem_instance,
+            content=ContentFile(self.pdf_content, name="editorial.pdf"),
+            publication_date=publication_date,
+        )
+
+    def test_editorial_link_hidden_before_publication(self):
+        self._create_editorial(publication_date=self._time(22))
+        self.assertTrue(self.client.login(username="test_user"))
+
+        with fake_time(self._time(21)):
+            response = self.client.get(self.problems_url)
+            self.assertNotContains(response, self.editorial_url)
+
+            response = self.client.get(self.editorial_url)
+            self.assertEqual(response.status_code, 403)
+
+    def test_editorial_link_visible_after_publication_and_streamed_inline(self):
+        self._create_editorial(publication_date=self._time(19))
+        self.assertTrue(self.client.login(username="test_user"))
+
+        with fake_time(self._time(21)):
+            response = self.client.get(self.problems_url)
+            self.assertContains(response, self.editorial_url)
+
+            response = self.client.get(self.editorial_url)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response["Content-Type"], "application/pdf")
+            self.assertIn("inline", response["Content-Disposition"])
+            self.assertEqual(b"".join(response.streaming_content), self.pdf_content)
+
+    def test_admin_can_access_editorial_before_publication(self):
+        self._create_editorial(publication_date=self._time(22))
+        self.assertTrue(self.client.login(username="test_admin"))
+
+        with fake_time(self._time(21)):
+            response = self.client.get(self.problems_url)
+            self.assertContains(response, self.editorial_url)
+
+            response = self.client.get(self.editorial_url)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(b"".join(response.streaming_content), self.pdf_content)
+
+    def test_unpublished_editorial_is_visible_immediately(self):
+        self._create_editorial(publication_date=None)
+        self.assertTrue(self.client.login(username="test_user"))
+
+        with fake_time(self._time(21)):
+            response = self.client.get(self.problems_url)
+            self.assertContains(response, self.editorial_url)
+
+            response = self.client.get(self.editorial_url)
+            self.assertEqual(response.status_code, 200)
+
+    def test_user_cannot_access_editorial_for_invisible_problem(self):
+        self._create_editorial(publication_date=self._time(19))
+        self.round.start_date = self._time(22)
+        self.round.save()
+        self.assertTrue(self.client.login(username="test_user"))
+
+        with fake_time(self._time(21)):
+            response = self.client.get(self.problems_url)
+            self.assertNotContains(response, self.editorial_url)
+
+            response = self.client.get(self.editorial_url)
+            self.assertEqual(response.status_code, 403)
+
+    def test_wrong_contest_editorial_url_is_not_accessible(self):
+        self._create_editorial(publication_date=self._time(19))
+        other_contest = Contest.objects.create(
+            id="editorialother",
+            name="Other contest",
+            controller_name=self.contest.controller_name,
+        )
+        wrong_url = reverse(
+            "problem_editorial",
+            kwargs={
+                "contest_id": other_contest.id,
+                "problem_instance": self.problem_instance.short_name,
+            },
+        )
+
+        self.assertTrue(self.client.login(username="test_admin"))
+        response = self.client.get(wrong_url)
+        self.assertEqual(response.status_code, 404)
+
+    def test_editorial_rejects_non_pdf_uploads(self):
+        editorial = ProblemEditorial(
+            problem_instance=self.problem_instance,
+            content=SimpleUploadedFile("editorial.txt", b"not a pdf"),
+        )
+
+        with self.assertRaises(ValidationError):
+            editorial.full_clean()
 
 
 class TestRoundExtension(TestCase, SubmitFileMixin):

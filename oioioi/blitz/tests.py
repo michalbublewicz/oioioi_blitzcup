@@ -11,7 +11,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test.utils import override_settings
 from django.urls import reverse
 
-from oioioi.base.tests import TestCase
+from oioioi.base.tests import TestCase, fake_time
 from oioioi.blitz.models import BlitzContestConfig, BlitzProblemState
 from oioioi.blitz.services import generate_match_contests
 from oioioi.contests.current_contest import ContestMode
@@ -22,6 +22,7 @@ from oioioi.contests.models import (
     ContestPermission,
     FilesMessage,
     LimitsVisibilityConfig,
+    ProblemEditorial,
     ProblemInstance,
     ProblemStatementConfig,
     RankingVisibilityConfig,
@@ -323,6 +324,48 @@ class TestBlitzMatchGeneration(TestCase):
             200,
         )
         self.assertEqual(self.client.get(reverse("default_contest_view", kwargs={"contest_id": contest_two.id}), follow=True).status_code, 403)
+
+    def test_blitz_problems_list_shows_editorial_link(self):
+        ProblemEditorial.objects.create(
+            problem_instance=self.source_problem,
+            content=ContentFile(b"%PDF-1.4 blitz-editorial", name="blitz-editorial.pdf"),
+            publication_date=datetime(2024, 1, 1, 9, tzinfo=UTC),
+        )
+
+        self.client.force_login(self.player_a)
+        problems_url = reverse("problems_list", kwargs={"contest_id": self.source_contest.id})
+        editorial_url = reverse(
+            "problem_editorial",
+            kwargs={
+                "contest_id": self.source_contest.id,
+                "problem_instance": self.source_problem.short_name,
+            },
+        )
+
+        with fake_time(datetime(2024, 1, 1, 10, 30, tzinfo=UTC)):
+            response = self.client.get(problems_url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, editorial_url)
+
+    def test_generate_matches_copies_problem_editorials(self):
+        publication_date = datetime(2024, 1, 1, 9, tzinfo=UTC)
+        ProblemEditorial.objects.create(
+            problem_instance=self.source_problem,
+            content=ContentFile(b"%PDF-1.4 cloned-editorial", name="cloned-editorial.pdf"),
+            publication_date=publication_date,
+        )
+
+        created = self._generate([("M1", self.player_a.username, self.player_b.username)])
+        target_contest = created[0]
+        target_problem = ProblemInstance.objects.get(
+            contest=target_contest,
+            short_name=self.source_problem.short_name,
+        )
+
+        self.assertTrue(hasattr(target_problem, "editorial"))
+        self.assertEqual(target_problem.editorial.publication_date, publication_date)
+        self.assertEqual(target_problem.editorial.content.read(), b"%PDF-1.4 cloned-editorial")
 
     def test_generate_matches_rejects_missing_username(self):
         with self.assertRaises(ValidationError):

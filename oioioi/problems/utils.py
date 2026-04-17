@@ -4,12 +4,13 @@ import zipfile
 from collections import defaultdict
 
 from django.conf import settings
+from django.core.files.base import ContentFile
 from django.core.exceptions import SuspiciousOperation
 from django.http import Http404, HttpResponse
 from django.utils import translation
 
 from oioioi.base.utils import request_cached
-from oioioi.contests.models import ProblemInstance, Submission
+from oioioi.contests.models import ProblemEditorial, ProblemInstance, Submission
 from oioioi.contests.processors import recent_contests
 from oioioi.contests.utils import (
     administered_contests,
@@ -219,6 +220,29 @@ def copy_problem_instance(pi, contest=None):
 
     orig_pi = ProblemInstance.objects.get(pk=orig_pk)
     update_tests_from_main_pi(pi, orig_pi)
+
+    try:
+        source_editorial = orig_pi.editorial
+    except ProblemEditorial.DoesNotExist:
+        source_editorial = None
+
+    if source_editorial is not None and pi.contest is not None:
+        source_editorial.content.open("rb")
+        try:
+            editorial_content = ContentFile(
+                source_editorial.content.read(),
+                name=source_editorial.download_name,
+            )
+        finally:
+            source_editorial.content.close()
+
+        target_editorial = ProblemEditorial(
+            problem_instance=pi,
+            publication_date=source_editorial.publication_date,
+        )
+        target_editorial.content.save(source_editorial.download_name, editorial_content, save=False)
+        target_editorial.save()
+
     return pi
 
 
