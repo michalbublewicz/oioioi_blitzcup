@@ -1,0 +1,47 @@
+{% load i18n %}
+{% if blitz_statement_problem %}
+    <div id="blitz-statement-alert" class="alert alert-warning d-none" role="status" aria-live="polite">
+        <strong>{% trans "This problem has already been solved." %}</strong>
+        <div class="blitz-statement-alert__body mt-2"></div>
+        <div class="blitz-statement-alert__details text-muted d-none"></div>
+    </div>
+    {{ blitz_statement_problem|json_script:'blitz-statement-problem' }}
+    <script>
+    (function() {
+        const statementProblem = JSON.parse(document.getElementById('blitz-statement-problem').textContent);
+        const statementAlert = document.getElementById('blitz-statement-alert');
+        const statementAlertBody = statementAlert.querySelector('.blitz-statement-alert__body');
+        const statementAlertDetails = statementAlert.querySelector('.blitz-statement-alert__details');
+        const statementAlertBodyTemplate = "{% blocktrans trimmed %}__solver__ solved __short_name__ for __points__ points.{% endblocktrans %}";
+
+        function interpolateTemplate(template, replacements) {
+            let result = template;
+            Object.keys(replacements).forEach(function(key) {
+                result = result.split(key).join(replacements[key]);
+            });
+            return result;
+        }
+
+        function showSolvedAlert(eventData) {
+            if (!eventData || eventData.problem_id !== statementProblem.id) {
+                return;
+            }
+            statementAlertBody.textContent = interpolateTemplate(statementAlertBodyTemplate, {
+                "__solver__": eventData.solver,
+                "__short_name__": eventData.short_name,
+                "__points__": eventData.points,
+            });
+            statementAlertDetails.textContent = eventData.details || '';
+            statementAlertDetails.classList.toggle('d-none', !eventData.details);
+            statementAlert.classList.remove('d-none');
+        }
+
+        $(window).on('blitzStatusUpdated', function(event, payload) {
+            showSolvedAlert(payload ? payload.latest_event : null);
+        });
+        $(window).on('blitzProblemSolved', function(event, eventData) {
+            showSolvedAlert(eventData);
+        });
+    })();
+    </script>
+{% endif %}

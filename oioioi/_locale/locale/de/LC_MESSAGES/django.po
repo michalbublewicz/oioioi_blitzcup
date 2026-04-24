@@ -10924,6 +10924,11 @@ msgstr ""
 msgid "There aren't any workers allowed to run cpu-exec jobs."
 msgstr ""
 
+#: workers/views.py:29
+#, python-format
+msgid "Couldn't connect to the worker daemon at %(url)s. Check whether sioworkersd is running and whether SIOWORKERSD_URL is correct."
+msgstr "Es konnte keine Verbindung zum Worker-Daemon unter %(url)s hergestellt werden. Prüfe, ob sioworkersd läuft und ob SIOWORKERSD_URL korrekt gesetzt ist."
+
 #: workers/views.py:93
 msgid "Manage workers"
 msgstr ""

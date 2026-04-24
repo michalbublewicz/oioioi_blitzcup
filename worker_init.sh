@@ -9,6 +9,10 @@ sudo apt install -y proot
 
 mkdir -pv /sio2/deployment/logs/database
 
+# Containers are often restarted in-place during local docker-compose work.
+# A stale pidfile from the previous run makes twistd exit immediately.
+rm -f /home/oioioi/worker.pid
+
 echo "LOG: Launching worker at `hostname`"
 exec python3 $(which twistd) --nodaemon --pidfile=/home/oioioi/worker.pid \
         -l /sio2/deployment/logs/worker`hostname`.log worker \

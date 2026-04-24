@@ -16,6 +16,14 @@ class TestServer:
         ]
 
 
+class UnavailableServer:
+    def get_workers(self):
+        raise ConnectionRefusedError(111, "Connection refused")
+
+    def forget_worker(self, name):
+        raise ConnectionRefusedError(111, "Connection refused")
+
+
 class TestWorkersInfo(TestCase):
     fixtures = ["test_users"]
 
@@ -34,3 +42,23 @@ class TestWorkersInfo(TestCase):
         url = reverse("show_workers")
         response = self.client.get(url)
         self.assertNotContains(response, "Komp4", status_code=403)
+
+
+class TestWorkersUnavailable(TestCase):
+    fixtures = ["test_users"]
+
+    def setUp(self):
+        views.server = UnavailableServer()
+        self.assertTrue(self.client.login(username="test_admin"))
+
+    def test_admin_gets_warning_instead_of_500(self):
+        response = self.client.get(reverse("show_workers"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Couldn't connect to the worker daemon", response.context["warning"])
+
+    def test_load_json_returns_empty_load_when_workers_are_unavailable(self):
+        response = self.client.get(reverse("get_load_json"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"capacity": 0, "load": 0, "unavailable": True})

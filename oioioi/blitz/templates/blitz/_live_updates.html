@@ -38,7 +38,7 @@
 }
 </style>
 <div id="blitz-live-popup" class="blitz-live-popup" aria-live="assertive" aria-atomic="true">
-    <div class="blitz-live-popup__title">{% trans "Problem solved!" %}</div>
+    <div class="blitz-live-popup__title">{% trans "Zadanie zrobione!" %}</div>
     <div class="blitz-live-popup__body"></div>
     <div class="blitz-live-popup__details"></div>
 </div>
@@ -51,28 +51,52 @@
     const popup = document.getElementById('blitz-live-popup');
     const popupBody = popup.querySelector('.blitz-live-popup__body');
     const popupDetails = popup.querySelector('.blitz-live-popup__details');
+    const popupBodyTemplate = "{% blocktrans trimmed %}__solver__ rozwiązał __short_name__.{% endblocktrans %}";
     let latestEventId = initialPayload.latest_event ? initialPayload.latest_event.event_id : null;
     let popupTimer = null;
 
+    function interpolateTemplate(template, replacements) {
+        let result = template;
+        Object.keys(replacements).forEach(function(key) {
+            result = result.split(key).join(replacements[key]);
+        });
+        return result;
+    }
+
     function showPopup(eventData) {
-        popupBody.textContent = `${eventData.solver} rozwiązał ${eventData.short_name} za ${eventData.points} punktów.`;
+        popupBody.textContent = interpolateTemplate(popupBodyTemplate, {
+            "__solver__": eventData.solver,
+            "__short_name__": eventData.short_name,
+            "__points__": eventData.points,
+        });
         popupDetails.textContent = eventData.details || '';
         popup.classList.add('is-visible');
         window.clearTimeout(popupTimer);
         popupTimer = window.setTimeout(() => popup.classList.remove('is-visible'), 7000);
     }
 
+    function publishStatus(data) {
+        $(window).trigger('blitzStatusUpdated', data);
+    }
+
+    function handlePayload(data) {
+        publishStatus(data);
+        if (data.latest_event && data.latest_event.event_id !== latestEventId) {
+            latestEventId = data.latest_event.event_id;
+            $(window).trigger('blitzProblemSolved', data.latest_event);
+            showPopup(data.latest_event);
+        }
+    }
+
     function poll() {
         $.getJSON(endpoint, function(data) {
-            if (data.latest_event && data.latest_event.event_id !== latestEventId) {
-                latestEventId = data.latest_event.event_id;
-                showPopup(data.latest_event);
-            }
+            handlePayload(data);
         }).always(function() {
             window.setTimeout(poll, 5000);
         });
     }
 
+    publishStatus(initialPayload);
     window.setTimeout(poll, 5000);
 })();
 </script>

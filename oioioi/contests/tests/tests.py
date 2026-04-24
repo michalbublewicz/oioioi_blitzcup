@@ -4142,6 +4142,11 @@ class TestSubmissionsLimitOnListView(TestCase):
             displays_tries_left=False,
         )
 
+    def test_anonymous_user_does_not_see_score_column(self):
+        self.client.logout()
+        response = self.client.get("/c/c/p", follow=True)
+        self.assertNotContains(response, '<th class="text-right">Score</th>', html=False)
+
 
 def see_link_for_submission_on_problem_list(self, username, should_see):
     if username is None:

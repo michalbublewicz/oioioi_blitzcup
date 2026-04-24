@@ -26,6 +26,7 @@ services:
         - "web:127.0.0.1"
     environment:
       OIOIOI_DB_ENGINE: 'django.db.backends.postgresql'
+      OIOIOI_SERVER_MODE: 'django'
       RABBITMQ_HOST: 'broker'
       RABBITMQ_PORT: '5672'
       RABBITMQ_USER: 'oioioi'
@@ -53,7 +54,7 @@ services:
     image: sio2project/oioioi-dev
     command: ["/sio2/oioioi/worker_init.sh"]
     environment:
-      WEB_URL: "web:8000"
+      WEB_URL: "web:7888"
       <<: *common-envs
     volumes:
       - .:/sio2/oioioi

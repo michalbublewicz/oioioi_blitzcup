@@ -281,6 +281,7 @@ class TestHandlers(TestCase):
                 "result_cpode": "OK",
                 "result_string": "OK",
                 "time_used": 111,
+                "mem_used": 512,
                 "out_file": "/output",
             }
 
@@ -293,6 +294,7 @@ class TestHandlers(TestCase):
             self.assertIn("report_id", environ)
             report = TestRunReport.objects.get(submission_report=environ["report_id"])
             self.assertEqual(111, report.time_used)
+            self.assertEqual(512, report.mem_used)
             self.assertEqual("", report.comment)
             self.assertEqual("o", report.output_file.read())
 

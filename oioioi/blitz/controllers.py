@@ -25,6 +25,7 @@ class BlitzContestController(ACMContestController):
     )
     problems_list_template = 'blitz/problems_list.html'
     html_statement_template = 'blitz/html_statement.html'
+    external_statement_template = 'blitz/external_statement.html'
 
     def mixins_for_admin(self):
         return super().mixins_for_admin() + (ContestAdminWithBlitzConfigInlineMixin,)
@@ -249,6 +250,7 @@ class BlitzContestController(ACMContestController):
         if latest_completed is not None:
             event = {
                 'event_id': f'{latest_completed.problem_instance_id}:{latest_completed.winning_submission_id}:{int(latest_completed.closed_at.timestamp())}',
+                'problem_id': latest_completed.problem_instance_id,
                 'solver': get_user_display_name(latest_completed.solved_by),
                 'short_name': latest_completed.problem_instance.get_short_name_display(),
                 'problem_name': latest_completed.problem_instance.problem.name,
@@ -379,10 +381,16 @@ class BlitzContestController(ACMContestController):
         }
 
     def get_statement_extra_context(self, request, problem_instance, rendered_html_statement=False):
-        return {
+        context = {
             'blitz_status_endpoint': reverse('blitz_status', kwargs={'contest_id': self.contest.id}),
             'blitz_initial_payload': self.serialize_live_status(request),
         }
+        if rendered_html_statement:
+            context['blitz_statement_problem'] = self._serialize_problem(
+                problem_instance,
+                self.get_ordered_problem_instances(),
+            )
+        return context
 
 
 class BlitzRankingController(DefaultRankingController):

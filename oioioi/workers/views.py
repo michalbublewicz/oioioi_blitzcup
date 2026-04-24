@@ -17,13 +17,20 @@ def get_info_about_workers():
     return server.get_workers()
 
 
-def get_all_names():
-    return [i["name"] for i in get_info_about_workers()]
+def get_selected_names(post_data):
+    return [key.removeprefix("work-") for key in post_data if key.startswith("work-")]
 
 
 def del_worker(value):
     for i in value:
         server.forget_worker(i)
+
+
+def get_workers_unavailable_warning():
+    return _(
+        "Couldn't connect to the worker daemon at %(url)s. "
+        "Check whether sioworkersd is running and whether SIOWORKERSD_URL is correct."
+    ) % {"url": settings.SIOWORKERSD_URL}
 
 
 @enforce_condition(is_superuser)
@@ -41,10 +48,19 @@ def show_info_about_workers(request):
             )
             delete = True
         if request.POST.get("confirm"):
-            selected = [x for x in get_all_names() if request.POST.get(f"work-{x}")]
-            del_worker(selected)
-            announce = _("Successfully deleted selected workers")
-    workers_info = get_info_about_workers()
+            selected = get_selected_names(request.POST)
+            try:
+                del_worker(selected)
+            except (OSError, xmlrpc.client.Error):
+                warning = get_workers_unavailable_warning()
+            else:
+                announce = _("Successfully deleted selected workers")
+
+    try:
+        workers_info = get_info_about_workers()
+    except (OSError, xmlrpc.client.Error):
+        workers_info = []
+        warning = get_workers_unavailable_warning()
 
     def transform_dict(d):
         select = request.POST.get("work-" + d["name"])
@@ -60,7 +76,7 @@ def show_info_about_workers(request):
 
     workers_info = list(map(transform_dict, workers_info))
 
-    if not any(map(itemgetter("can_run_cpu_exec"), workers_info)) and not settings.USE_UNSAFE_EXEC:
+    if workers_info and not any(map(itemgetter("can_run_cpu_exec"), workers_info)) and not settings.USE_UNSAFE_EXEC:
         warning = _("There aren't any workers allowed to run cpu-exec jobs.")
 
     context = {
@@ -75,7 +91,11 @@ def show_info_about_workers(request):
 
 @enforce_condition(is_superuser)
 def get_load_json(request):
-    data = get_info_about_workers()
+    try:
+        data = get_info_about_workers()
+    except (OSError, xmlrpc.client.Error):
+        return JsonResponse({"capacity": 0, "load": 0, "unavailable": True})
+
     capacity = 0
     load = 0
     for i in data:

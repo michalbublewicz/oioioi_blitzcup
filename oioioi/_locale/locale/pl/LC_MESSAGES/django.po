@@ -11081,6 +11081,11 @@ msgstr "Usunięto zaznaczone sprawdzaczki"
 msgid "There aren't any workers allowed to run cpu-exec jobs."
 msgstr "Nie ma w obecnej chwili żadnych maszyn roboczych, które mogłyby uruchamiać zadania typu cpu-exec."
 
+#: workers/views.py:29
+#, python-format
+msgid "Couldn't connect to the worker daemon at %(url)s. Check whether sioworkersd is running and whether SIOWORKERSD_URL is correct."
+msgstr "Nie udało się połączyć z daemonem workerów pod adresem %(url)s. Sprawdź, czy sioworkersd działa i czy SIOWORKERSD_URL jest ustawione poprawnie."
+
 #: workers/views.py:93
 msgid "Manage workers"
 msgstr "Zarządzanie sprawdzaczkami"

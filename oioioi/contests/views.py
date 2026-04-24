@@ -1,3 +1,4 @@
+import mimetypes
 from operator import itemgetter  # pylint: disable=E0611
 
 import six
@@ -6,7 +7,7 @@ from django.contrib import messages
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied, SuspiciousOperation
 from django.db.models import OuterRef, Q, Subquery
-from django.http import HttpResponse, HttpResponseRedirect
+from django.http import Http404, HttpResponse, HttpResponseRedirect
 from django.shortcuts import get_object_or_404, redirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
@@ -252,7 +253,7 @@ def problems_list_view(request):
     show_submit_button = any(p[7] for p in problems_statements)
     show_rounds = len(frozenset(pi.round_id for pi in problem_instances)) > 1
     show_status = request.user.is_authenticated  # Always show status for authenticated users
-    table_columns = 3 + int(show_problems_limits) + int(show_submissions_limit) + int(show_submit_button)
+    table_columns = 2 + int(request.user.is_authenticated) + int(show_problems_limits) + int(show_submissions_limit) + int(show_submit_button)
 
     context = {
         "problem_instances": problems_statements,
@@ -297,6 +298,22 @@ def problem_statement_view(request, problem_instance):
             problem_instance=problem_instance,
             statement_id=statement.id,
         )
+    external_template_name = getattr(controller, "external_statement_template", None)
+    if external_template_name and statement.extension == ".pdf":
+        context = {
+            "problem_name": pi.problem.name,
+            "statement_url": reverse(
+                "problem_statement_file",
+                kwargs={
+                    "contest_id": request.contest.id,
+                    "problem_instance": problem_instance,
+                },
+            ),
+            "statement_content_type": mimetypes.guess_type(statement.download_name)[0] or "application/octet-stream",
+        }
+        if hasattr(controller, "get_statement_extra_context"):
+            context.update(controller.get_statement_extra_context(request, pi, rendered_html_statement=True))
+        return TemplateResponse(request, external_template_name, context)
     return stream_file(statement.content, statement.download_name)
 
 
@@ -327,6 +344,24 @@ def problem_statement_zip_index_view(request, problem_instance, statement_id):
         context.update(controller.get_statement_extra_context(request, pi, rendered_html_statement=True))
     template_name = getattr(controller, 'html_statement_template', 'contests/html_statement.html')
     return TemplateResponse(request, template_name, context)
+
+
+@enforce_condition(contest_exists & can_enter_contest)
+def problem_statement_file_view(request, problem_instance):
+    controller = request.contest.controller
+    pi = get_object_or_404(ProblemInstance, round__contest=request.contest, short_name=problem_instance)
+
+    if not controller.can_see_problem(request, pi) or not controller.can_see_statement(request, pi):
+        raise PermissionDenied
+
+    if not pi.problem.controller.supports_problem_statement():
+        return redirect("submit", problem_instance_id=pi.id)
+
+    statement = query_statement(pi.problem)
+    if not statement:
+        raise Http404
+
+    return stream_file(statement.content, statement.download_name)
 
 
 @enforce_condition(contest_exists & can_enter_contest)

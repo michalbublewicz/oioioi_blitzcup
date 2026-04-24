@@ -8,6 +8,8 @@ from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.db import transaction
+from django.test import RequestFactory
 from django.test.utils import override_settings
 from django.urls import reverse
 
@@ -31,10 +33,13 @@ from oioioi.contests.models import (
     SubmissionMessage,
     SubmitMessage,
     SubmissionsMessage,
+    SubmissionReport,
 )
+from oioioi.filetracker.tests import TestStreamingMixin
 from oioioi.participants.models import Participant, TermsAcceptedPhrase
+from oioioi.problems.models import ProblemStatement
 from oioioi.problems.utils import copy_problem_instance
-from oioioi.programs.models import ProgramsConfig
+from oioioi.programs.models import ProgramSubmission, ProgramsConfig
 
 
 def build_xlsx_file(rows):
@@ -113,8 +118,18 @@ def build_xlsx_file(rows):
     )
 
 
+def build_html_statement_file(body="<p>Blitz statement</p>"):
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(
+            "index.html",
+            f"<!DOCTYPE html><html><body>{body}</body></html>",
+        )
+    return ContentFile(buffer.getvalue(), name="statement.html.zip")
+
+
 @override_settings(CONTEST_MODE=ContestMode.neutral)
-class TestBlitzMatchGeneration(TestCase):
+class TestBlitzMatchGeneration(TestCase, TestStreamingMixin):
     fixtures = [
         "test_users",
         "test_contest",
@@ -211,6 +226,36 @@ class TestBlitzMatchGeneration(TestCase):
             contest_id_prefix=prefix,
             workbook_file=build_xlsx_file(rows),
         )
+
+    def _make_request(self, timestamp, user=None):
+        request = RequestFactory().get("/")
+        request.contest = self.source_contest
+        request.timestamp = timestamp
+        request.user = user or self.player_a
+        return request
+
+    def _solve_problem(self, problem_instance, user, solve_time):
+        submission = ProgramSubmission.objects.create(
+            problem_instance=problem_instance,
+            user=user,
+            date=solve_time,
+            kind="NORMAL",
+            source_file=ContentFile(b"int main(void) { return 0; }", name="solve.c"),
+        )
+        submission.status = "OK"
+        submission.save(update_fields=["status"])
+
+        report = SubmissionReport.objects.create(
+            submission=submission,
+            status="ACTIVE",
+            kind="NORMAL",
+        )
+        SubmissionReport.objects.filter(pk=report.pk).update(creation_date=solve_time)
+
+        with transaction.atomic():
+            self.source_contest.controller.reconcile_problem_states()
+
+        return submission
 
     def test_generate_matches_view_permissions(self):
         url = reverse("blitz_generate_matches", kwargs={"contest_id": self.source_contest.id})
@@ -347,6 +392,107 @@ class TestBlitzMatchGeneration(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, editorial_url)
+
+    def test_blitz_status_payload_includes_problem_id_for_latest_event(self):
+        solve_time = datetime(2024, 1, 1, 10, 30, tzinfo=UTC)
+        self._solve_problem(self.source_problem, self.player_a, solve_time)
+
+        payload = self.source_contest.controller.serialize_live_status(
+            self._make_request(datetime(2024, 1, 1, 10, 31, tzinfo=UTC))
+        )
+
+        self.assertEqual(payload["latest_event"]["problem_id"], self.source_problem.id)
+
+    def test_blitz_html_statement_includes_inline_alert_wiring(self):
+        ProblemStatement.objects.create(
+            problem=self.source_problem.problem,
+            content=build_html_statement_file("<h1>Round one</h1>"),
+        )
+        self.client.force_login(self.player_a)
+
+        with fake_time(datetime(2024, 1, 1, 10, tzinfo=UTC)):
+            response = self.client.get(
+                reverse(
+                    "problem_statement",
+                    kwargs={
+                        "contest_id": self.source_contest.id,
+                        "problem_instance": self.source_problem.short_name,
+                    },
+                ),
+                follow=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'class="blitz-statement-page"')
+        self.assertContains(response, 'id="blitz-statement-alert"')
+        self.assertContains(response, "blitz-statement-problem")
+        self.assertContains(response, "blitz-live-popup")
+        self.assertNotContains(response, 'class="blitz-statement-page__hero"')
+        self.assertContains(response, "$(window).on('blitzStatusUpdated'")
+        self.assertContains(response, "$(window).on('blitzProblemSolved'")
+
+    def test_blitz_pdf_statement_renders_wrapper_with_live_popup(self):
+        self.client.force_login(self.player_a)
+
+        with fake_time(datetime(2024, 1, 1, 10, tzinfo=UTC)):
+            response = self.client.get(
+                reverse(
+                    "problem_statement",
+                    kwargs={
+                        "contest_id": self.source_contest.id,
+                        "problem_instance": self.source_problem.short_name,
+                    },
+                ),
+                follow=True,
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.streaming)
+        self.assertContains(response, 'class="statement-shell__object"')
+        self.assertContains(response, 'id="blitz-live-popup"')
+        self.assertContains(response, 'id="blitz-statement-alert"')
+        self.assertNotContains(response, 'class="blitz-statement-page__hero"')
+        self.assertContains(
+            response,
+            reverse(
+                "problem_statement_file",
+                kwargs={
+                    "contest_id": self.source_contest.id,
+                    "problem_instance": self.source_problem.short_name,
+                },
+            ),
+        )
+        self.assertContains(response, 'type="application/pdf"')
+        self.assertContains(response, "calc(100vh - 8.5rem)")
+
+    def test_blitz_pdf_statement_file_view_streams_pdf(self):
+        self.client.force_login(self.player_a)
+
+        with fake_time(datetime(2024, 1, 1, 10, tzinfo=UTC)):
+            response = self.client.get(
+                reverse(
+                    "problem_statement_file",
+                    kwargs={
+                        "contest_id": self.source_contest.id,
+                        "problem_instance": self.source_problem.short_name,
+                    },
+                )
+            )
+
+        self.assertEqual(response.status_code, 200)
+        content = self.streamingContent(response)
+        self.assertTrue(content.startswith(b"%PDF"))
+
+    def test_blitz_inline_alert_wiring_is_only_present_on_statement_page(self):
+        self.client.force_login(self.player_a)
+
+        with fake_time(datetime(2024, 1, 1, 10, tzinfo=UTC)):
+            response = self.client.get(reverse("problems_list", kwargs={"contest_id": self.source_contest.id}))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "blitz-live-popup")
+        self.assertNotContains(response, 'id="blitz-statement-alert"')
+        self.assertNotContains(response, "blitz-statement-problem")
 
     def test_generate_matches_copies_problem_editorials(self):
         publication_date = datetime(2024, 1, 1, 9, tzinfo=UTC)

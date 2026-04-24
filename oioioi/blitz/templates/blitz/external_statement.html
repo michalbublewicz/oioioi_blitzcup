@@ -1,0 +1,14 @@
+{% extends "contests/external_statement.html" %}
+{% load i18n %}
+
+{% block styles %}
+{{ block.super }}
+{% include "blitz/_statement_styles.html" %}
+{% endblock %}
+
+{% block statement_header %}
+{% endblock %}
+
+{% block statement_notice %}
+{% include "blitz/statement-alert.html" %}
+{% endblock %}

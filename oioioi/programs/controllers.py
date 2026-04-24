@@ -661,6 +661,7 @@ class ProgrammingProblemController(ProblemController):
         allow_download_out = pcontroller.user_outs_exist() and picontroller.can_generate_user_out(request, report)
         allow_test_comments = picontroller.can_see_test_comments(request, report)
         all_outs_generated = allow_download_out
+        show_mem_used = any(test.mem_used for test in test_reports)
 
         groups = []
         signals_to_explain = set()
@@ -702,6 +703,7 @@ class ProgrammingProblemController(ProblemController):
                 "all_outs_generated": all_outs_generated,
                 "is_admin": picontroller.is_admin(request, report),
                 "signals_to_explain": signals_to_explain,
+                "show_mem_used": show_mem_used,
             },
         )
 

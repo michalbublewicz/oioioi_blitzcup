@@ -271,6 +271,7 @@ class TestRunContestControllerMixin:
         input_is_zip = False
         if testrun_report:
             input_is_zip = is_zipfile(testrun_report.submission_report.submission.programsubmission.testrunprogramsubmission.input_file.read_using_cache())
+        show_mem_used = bool(testrun_report and testrun_report.mem_used > 0)
 
         return render_to_string(
             template,
@@ -282,6 +283,7 @@ class TestRunContestControllerMixin:
                 "testrun_report": testrun_report,
                 "output_container_id_prefix": output_container_id_prefix,
                 "input_is_zip": input_is_zip,
+                "show_mem_used": show_mem_used,
             },
         )
 

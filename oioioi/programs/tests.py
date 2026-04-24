@@ -1157,6 +1157,7 @@ class TestReportDisplay(TestCase):
             score=IntegerScore(100),
             max_score=IntegerScore(100),
             time_used=100,
+            mem_used=0,
             test_time_limit=1000,
         )
         self.assertEqual(test_report.get_status_display(), "OK")
@@ -2024,6 +2025,7 @@ class TestSkipAggregationAndRendering(TestCase):
             score=None,
             max_score=None,
             time_used=0,
+            mem_used=0,
             test_time_limit=100,
         )
 
@@ -2109,6 +2111,7 @@ class TestSkipScheduler(TestCase):
             score=None,
             max_score=None,
             time_used=time_used,
+            mem_used=0,
             test_time_limit=100,
         )
 
@@ -2199,6 +2202,7 @@ class TestSkipScheduler(TestCase):
             score=IntegerScore(100),
             max_score=IntegerScore(100),
             time_used=7,
+            mem_used=0,
             test_time_limit=100,
         )
 

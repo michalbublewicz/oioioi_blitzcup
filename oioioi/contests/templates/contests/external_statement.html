@@ -1,0 +1,79 @@
+{% extends "base-with-menu.html" %}
+{% load i18n %}
+
+{% block styles %}
+{{ block.super }}
+<style>
+.statement-shell {
+    margin-bottom: 1.5rem;
+}
+
+.statement-shell__header {
+    margin-bottom: 1rem;
+}
+
+.statement-shell__eyebrow {
+    margin: 0 0 0.35rem;
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.statement-shell__title {
+    margin: 0;
+    font-size: clamp(1.5rem, 2.4vw, 2.1rem);
+    line-height: 1.08;
+}
+
+.statement-shell__viewer {
+    overflow: hidden;
+    border: 1px solid #d8dee4;
+    border-radius: 1rem;
+    background:
+        linear-gradient(180deg, rgba(248, 249, 250, 0.95), rgba(255, 255, 255, 0.98));
+    box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08);
+}
+
+.statement-shell__object {
+    display: block;
+    width: 100%;
+    height: clamp(30rem, calc(100vh - 8.5rem), 82rem);
+    background: #fff;
+}
+
+.statement-shell__fallback {
+    margin: 0.9rem 0 0;
+    color: #6c757d;
+}
+
+@media (max-width: 767.98px) {
+    .statement-shell__object {
+        height: min(calc(100vh - 7rem), 42rem);
+    }
+}
+</style>
+{% endblock %}
+
+{% block title %}
+{{ problem_name }} - {% trans "Problem statement" %}
+{% endblock %}
+
+{% block main-content %}
+<div class="statement-shell">
+    {% block statement_header %}
+        <header class="statement-shell__header">
+            <p class="statement-shell__eyebrow">{% trans "Problem statement" %}</p>
+            <h1 class="statement-shell__title">{{ problem_name }}</h1>
+        </header>
+    {% endblock %}
+    {% block statement_notice %}{% endblock %}
+    <div class="statement-shell__viewer">
+        <object class="statement-shell__object" data="{{ statement_url }}" type="{{ statement_content_type|default:'application/pdf' }}"></object>
+    </div>
+    <div class="statement-shell__fallback">
+        {% blocktrans %}You can also open the problem's statement by clicking <a href="{{ statement_url }}"><b>here</b></a>.{% endblocktrans %}
+    </div>
+</div>
+{% endblock %}

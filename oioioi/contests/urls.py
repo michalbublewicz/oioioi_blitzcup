@@ -83,6 +83,11 @@ c_patterns = [
         name="problem_statement",
     ),
     re_path(
+        r"^p/(?P<problem_instance>[a-z0-9_-]+)/file/$",
+        views.problem_statement_file_view,
+        name="problem_statement_file",
+    ),
+    re_path(
         r"^p/(?P<problem_instance>[a-z0-9_-]+)/editorial/$",
         views.problem_editorial_view,
         name="problem_editorial",

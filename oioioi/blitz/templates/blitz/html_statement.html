@@ -1,5 +1,16 @@
 {% extends "contests/html_statement.html" %}
+{% load i18n %}
+
+{% block styles %}
+{{ block.super }}
+{% include "blitz/_statement_styles.html" %}
+{% endblock %}
 
 {% block main-content %}
-{{ block.super }}
+<div class="blitz-statement-page">
+    {% include "blitz/statement-alert.html" %}
+    <div class="blitz-statement-page__content">
+        {{ block.super }}
+    </div>
+</div>
 {% endblock %}

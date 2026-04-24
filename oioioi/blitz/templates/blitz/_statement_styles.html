@@ -1,0 +1,47 @@
+<style>
+.blitz-statement-page {
+    margin-bottom: 1.5rem;
+}
+
+.blitz-statement-page__content {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 1rem;
+    padding: clamp(0.9rem, 1.8vw, 1.35rem);
+    box-shadow: 0 16px 35px rgba(31, 41, 55, 0.05);
+    overflow-x: auto;
+}
+
+.blitz-statement-page__content img,
+.blitz-statement-page__content svg,
+.blitz-statement-page__content iframe,
+.blitz-statement-page__content video {
+    max-width: 100%;
+}
+
+.blitz-statement-page__content table {
+    max-width: 100%;
+}
+
+.blitz-statement-page__content > :last-child {
+    margin-bottom: 0;
+}
+
+#blitz-statement-alert {
+    margin-bottom: 1rem;
+    border-width: 2px;
+    border-radius: 1rem;
+    box-shadow: 0 14px 30px rgba(220, 53, 69, 0.08);
+}
+
+.blitz-statement-alert__details.d-none {
+    display: none;
+}
+
+@media (max-width: 767.98px) {
+    .blitz-statement-page__content {
+        padding: 0.9rem;
+        border-radius: 0.85rem;
+    }
+}
+</style>
