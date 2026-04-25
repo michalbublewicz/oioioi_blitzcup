@@ -38,7 +38,7 @@ services:
     image: sio2project/oioioi:$OIOIOI_VERSION
     command: ["/sio2/oioioi/worker_init.sh"]
     environment:
-      WEB_URL: "web:7888"
+      WEB_URL: "web:8000"
       <<: *common-envs
     stop_grace_period: 1m
     cap_add:

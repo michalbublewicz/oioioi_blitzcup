@@ -24,6 +24,7 @@ RUN apt-get update && \
         make \
         gcc \
         g++ \
+        g++-14 \
         libc6-dev \
         sudo \
         libstdc++6 \

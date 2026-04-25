@@ -105,6 +105,9 @@ Homepage = "https://github.com/sio2project"
 [project.scripts]
 oioioi-create-config = "oioioi.deployment.create_config:main"
 
+[project.entry-points."sio.compilers"]
+"g++14_2_cpp23_amd64" = "oioioi.sioworkers.compilers:run_cpp_gcc14_2_cpp23_amd64"
+
 [tool.setuptools]
 packages = {find = {exclude = ["ez_setup"]}}
 include-package-data = true
